@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import axios from "axios";
 import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
@@ -12,6 +11,7 @@ export default function Dashboard() {
   const [corners, setCorners] = useState<{x: number, y: number}[]>([]);
   const [lightAngle, setLightAngle] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeminiLoading, setIsGeminiLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState("arabic");
 
@@ -24,7 +24,11 @@ export default function Dashboard() {
   const handleProcess = async () => {
     if (!imageFile || corners.length !== 4) return;
     setIsProcessing(true);
+    // isGeminiLoading is intentionally NOT set here — it activates only
+    // after braille + translation are already rendered (see translation event below)
+    setIsGeminiLoading(false);
     setError(null);
+    setResults({ braille: "", arabic: "", gemini: "" });
 
     const formData = new FormData();
     formData.append("file", imageFile);
@@ -33,26 +37,59 @@ export default function Dashboard() {
     formData.append("language", language);
 
     try {
-      // Assuming FastAPI runs on 8000 locally
-      const response = await axios.post("http://localhost:8000/process", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data"
-        }
+      const response = await fetch("http://localhost:8000/process-stream", {
+        method: "POST",
+        body: formData,
       });
 
-      if (response.data.success) {
-        setResults({
-          braille: response.data.braille,
-          arabic: response.data.arabic,
-          gemini: response.data.gemini
-        });
-      } else {
-        setError(response.data.error || "An unknown error occurred on the server.");
+      if (!response.ok || !response.body) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          try {
+            const event = JSON.parse(jsonStr);
+            if (event.type === "braille") {
+              setResults(prev => ({ ...prev, braille: event.value }));
+              setIsProcessing(false); // UI unlocked as soon as braille arrives
+            } else if (event.type === "translation") {
+              setResults(prev => ({ ...prev, arabic: event.value }));
+              // Both braille and translation are now on screen — activate Gemini spinner
+              setIsGeminiLoading(true);
+            } else if (event.type === "gemini") {
+              setResults(prev => ({ ...prev, gemini: event.value }));
+              setIsGeminiLoading(false);
+            } else if (event.type === "done") {
+              setIsGeminiLoading(false);
+            } else if (event.type === "error") {
+              setError(event.value);
+              setIsProcessing(false);
+              setIsGeminiLoading(false);
+            }
+          } catch {
+            // ignore malformed SSE lines
+          }
+        }
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || "Failed to process image.");
-    } finally {
+      setError(err.message || "Failed to connect to the processing server.");
       setIsProcessing(false);
+      setIsGeminiLoading(false);
     }
   };
 
@@ -94,19 +131,25 @@ export default function Dashboard() {
               <option value="english_g1">English G1 — Grade 1 (literal)</option>
               <option value="english_g2">English G2 — Grade 2 (contrac.)</option>
               <option value="russian">Russian — Русский</option>
+              <option value="raw">Braille Unicode Only (No Dictionary)</option>
             </select>
           </div>
           
           <div className="mt-6">
             <button 
               onClick={handleProcess}
-              disabled={!imageFile || isProcessing || corners.length !== 4}
+              disabled={!imageFile || isProcessing || isGeminiLoading || corners.length !== 4}
               className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-lg flex items-center justify-center space-x-3"
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="w-6 h-6 animate-spin" />
-                  <span>Processing Pipeline...</span>
+                  <span>Extracting & Translating...</span>
+                </>
+              ) : isGeminiLoading ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span>Awaiting Gemini...</span>
                 </>
               ) : (
                 <span>Extract & Translate</span>
@@ -124,6 +167,7 @@ export default function Dashboard() {
             arabic={results.arabic} 
             gemini={results.gemini}
             language={language}
+            isGeminiLoading={isGeminiLoading}
           />
 
         </div>

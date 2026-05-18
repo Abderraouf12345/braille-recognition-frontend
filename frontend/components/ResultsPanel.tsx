@@ -9,9 +9,10 @@ interface ResultsPanelProps {
   arabic: string;
   gemini: string;
   language?: string;
+  isGeminiLoading?: boolean;
 }
 
-export default function ResultsPanel({ braille, arabic, gemini, language = "arabic" }: ResultsPanelProps) {
+export default function ResultsPanel({ braille, arabic, gemini, language = "arabic", isGeminiLoading = false }: ResultsPanelProps) {
   const [activeTab, setActiveTab] = useState<"braille" | "arabic" | "gemini">("gemini");
 
   // Format Braille text to ensure every line is left-justified while preserving vertical gaps
@@ -124,10 +125,11 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
       <div className="flex border-b border-gray-700">
         <button
           onClick={() => setActiveTab("gemini")}
-          className={`flex-1 py-4 text-sm font-medium transition-colors ${activeTab === "gemini" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
+          className={`flex-1 py-4 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === "gemini" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
             }`}
         >
           Corrected (Gemini)
+          {isGeminiLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />}
         </button>
         <button
           onClick={() => setActiveTab("arabic")}
@@ -151,8 +153,18 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
         dir={activeTab !== "braille" && language === "arabic" ? "rtl" : "ltr"}
       >
         {activeTab === "braille" && (formattedBraille || "No braille decoded yet.")}
-        {activeTab === "arabic" && (arabic || "No translated text yet.")}
-        {activeTab === "gemini" && (gemini || "No Gemini correction yet.")}
+        {activeTab === "arabic" && (
+          language === "raw"
+            ? <span className="text-gray-500 italic">Translation disabled in Raw Mode. Switch to a language to enable translation.</span>
+            : (arabic || "No translated text yet.")
+        )}
+        {activeTab === "gemini" && (
+          language === "raw"
+            ? <span className="text-gray-500 italic">Gemini correction disabled in Raw Mode. Switch to a language to enable correction.</span>
+            : isGeminiLoading
+              ? <div className="flex items-center gap-3 text-gray-400"><Loader2 className="w-5 h-5 animate-spin text-blue-400" /><span className="italic">Gemini is correcting the text...</span></div>
+              : (gemini || "No Gemini correction yet.")
+        )}
       </div>
 
       {/* TTS Controls */}

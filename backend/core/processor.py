@@ -1961,7 +1961,7 @@ class BrailleProcessor:
             line_gap=neighbors_vertical_mid_p,
         )
 
-        # ── Translate ─────────────────────────────────────────────────────────
-        translated, gemini_corrected = translate_results(braille_text,
-                                                         language=language)
-        return braille_text, translated, gemini_corrected
+        # ── Translate (dictionary only — Gemini is handled by the stream endpoint) ──
+        from .translator import translate_only
+        translated = translate_only(braille_text, language=language)
+        return braille_text, translated

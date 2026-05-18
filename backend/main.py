@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -69,7 +69,7 @@ async def process_image(
         angle_rad = np.radians(lightAngle)
         V = np.array([np.sin(angle_rad), -np.cos(angle_rad)])
         
-        # Run heavy processing in background thread (returns braille, arabic, corrected)
+        # Run heavy processing in background thread (returns braille, translated)
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             executor, 
@@ -80,13 +80,20 @@ async def process_image(
             language
         )
         
-        # Unpack the three-part result
-        if isinstance(result, tuple) and len(result) == 3:
-            braille_text, arabic_text, gemini_text = result
+        # Unpack the two-part result (Gemini now handled separately)
+        if isinstance(result, tuple) and len(result) >= 2:
+            braille_text, arabic_text = result[0], result[1]
         else:
             braille_text = str(result)
             arabic_text = ""
-            gemini_text = ""
+
+        # Run Gemini correction synchronously for the legacy endpoint
+        from core.translator import correct_text_with_gemini
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        if gemini_key and language.lower() != "raw":
+            gemini_text = await loop.run_in_executor(executor, correct_text_with_gemini, arabic_text)
+        else:
+            gemini_text = "" if language.lower() == "raw" else "Gemini API key not configured."
         
         return {
             "success": True,
@@ -96,6 +103,78 @@ async def process_image(
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@app.post("/process-stream")
+async def process_image_stream(
+    file: UploadFile = File(...),
+    corners: str = Form(...),
+    lightAngle: float = Form(...),
+    language: str = Form("arabic")
+):
+    """
+    Streaming endpoint using Server-Sent Events (SSE).
+    Yields results progressively: braille → translation → gemini correction.
+    """
+    contents = await file.read()
+
+    async def event_stream():
+        try:
+            nparr = np.frombuffer(contents, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            pts_data = json.loads(corners)
+            pts_list = [[pt['x'], pt['y']] for pt in pts_data]
+            pts_src = np.float32(pts_list)
+
+            angle_rad = np.radians(lightAngle)
+            V = np.array([np.sin(angle_rad), -np.cos(angle_rad)])
+
+            # --- Stage 1: Run heavy image processing + dictionary translation ---
+            loop = asyncio.get_running_loop()
+            braille_text, translated_text = await loop.run_in_executor(
+                executor,
+                processor.process,
+                img, pts_src, V, language
+            )
+
+            # Yield braille immediately
+            yield f"data: {json.dumps({'type': 'braille', 'value': braille_text})}\n\n"
+            # Yield translation immediately
+            yield f"data: {json.dumps({'type': 'translation', 'value': translated_text})}\n\n"
+
+            # --- Stage 2: Run Gemini correction asynchronously ---
+            if language.lower() == "raw":
+                yield f"data: {json.dumps({'type': 'gemini', 'value': ''})}\n\n"
+            else:
+                from core.translator import correct_text_with_gemini
+                import os as _os
+                key = _os.environ.get("GEMINI_API_KEY", "")
+                if key:
+                    gemini_text = await loop.run_in_executor(
+                        executor,
+                        correct_text_with_gemini,
+                        translated_text
+                    )
+                else:
+                    gemini_text = "Gemini API key not configured. Unable to perform correction."
+                yield f"data: {json.dumps({'type': 'gemini', 'value': gemini_text})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'value': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
+
 
 class TTSRequest(BaseModel):
     text: str

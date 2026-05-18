@@ -520,6 +520,10 @@ def translate_results(braille_text: str, language: str = "arabic"):
         translated = translate_braille_to_english_g2(braille_text)
     elif lang == "russian":
         translated = translate_braille_to_russian(braille_text)
+    elif lang == "raw":
+        # Raw mode: bypass translation and Gemini correction entirely
+        print("🔵 Raw mode selected — skipping translation and Gemini correction.")
+        return braille_text, ""
     else:
         translated = translate_braille_to_arabic(braille_text)
 
@@ -530,3 +534,31 @@ def translate_results(braille_text: str, language: str = "arabic"):
         corrected = "Gemini API key not configured. Unable to perform correction."
 
     return translated, corrected
+
+
+def translate_only(braille_text: str, language: str = "arabic") -> str:
+    """
+    Translates braille text to the specified language using the dictionary ONLY.
+    Does NOT call the Gemini API. Use this for fast, synchronous translation
+    when Gemini correction will be done separately as an async step.
+    Returns translated_text string.
+    """
+    lang = language.lower()
+
+    if lang == "arabic":
+        translated = translate_braille_to_arabic(braille_text)
+        translated = translated.replace("\u064f\u0622", "\u064f\u0647\u0627").replace("\u0627\u0650\u0651\u062a\u0626\u062f", "\u0627\u062a\u062e\u0630")
+    elif lang == "french":
+        translated = translate_braille_to_french(braille_text)
+    elif lang == "english_g1":
+        translated = translate_braille_to_english_g1(braille_text)
+    elif lang == "english_g2":
+        translated = translate_braille_to_english_g2(braille_text)
+    elif lang == "russian":
+        translated = translate_braille_to_russian(braille_text)
+    elif lang == "raw":
+        return braille_text  # Raw mode: return braille as-is
+    else:
+        translated = translate_braille_to_arabic(braille_text)
+
+    return translated
