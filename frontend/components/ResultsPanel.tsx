@@ -14,14 +14,17 @@ interface ResultsPanelProps {
 export default function ResultsPanel({ braille, arabic, gemini, language = "arabic" }: ResultsPanelProps) {
   const [activeTab, setActiveTab] = useState<"braille" | "arabic" | "gemini">("gemini");
 
+  // Format Braille text to ensure every line is left-justified while preserving vertical gaps
+  const formattedBraille = braille ? braille.split('\n').map(line => line.replace(/^[\s\u2800]+/, '')).join('\n') : "";
+
   // TTS State
-  const [voicesByLang, setVoicesByLang] = useState<Record<string, {label: string, value: string}[]>>({});
+  const [voicesByLang, setVoicesByLang] = useState<Record<string, { label: string, value: string }[]>>({});
   const [langs, setLangs] = useState<string[]>([]);
   const [selectedLang, setSelectedLang] = useState<string>("Arabic");
   const [selectedVoice, setSelectedVoice] = useState<string>("");
   const [isTtsLoading, setIsTtsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -32,10 +35,10 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
         if (response.data.success) {
           setVoicesByLang(response.data.voices);
           setLangs(response.data.languages);
-          
+
           const defaultLang = response.data.languages.includes("Arabic") ? "Arabic" : response.data.languages[0];
           setSelectedLang(defaultLang);
-          
+
           const defaultVoices = response.data.voices[defaultLang] || [];
           if (defaultVoices.length > 0) {
             const algVoice = defaultVoices.find((v: any) => v.label.includes("Algeria"));
@@ -63,7 +66,7 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
 
   const handlePlayAudio = async () => {
     let content = "";
-    if (activeTab === "braille") content = braille;
+    if (activeTab === "braille") content = formattedBraille;
     else if (activeTab === "arabic") content = arabic;
     else content = gemini;
 
@@ -77,15 +80,15 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
       }, {
         responseType: 'blob'
       });
-      
+
       const url = window.URL.createObjectURL(new Blob([response.data], { type: "audio/mpeg" }));
-      
+
       if (audioUrl) {
         window.URL.revokeObjectURL(audioUrl);
       }
-      
+
       setAudioUrl(url);
-      
+
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = url;
@@ -100,7 +103,7 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
 
   const handleDownload = () => {
     let content = "";
-    if (activeTab === "braille") content = braille;
+    if (activeTab === "braille") content = formattedBraille;
     else if (activeTab === "arabic") content = arabic;
     else content = gemini;
 
@@ -113,7 +116,7 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
     URL.revokeObjectURL(url);
   };
 
-  const currentContent = activeTab === "braille" ? braille : activeTab === "arabic" ? arabic : gemini;
+  const currentContent = activeTab === "braille" ? formattedBraille : activeTab === "arabic" ? arabic : gemini;
 
   return (
     <div className="flex-1 bg-gray-800 rounded-2xl flex flex-col border border-gray-700 shadow-xl overflow-hidden mt-6">
@@ -121,33 +124,33 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
       <div className="flex border-b border-gray-700">
         <button
           onClick={() => setActiveTab("gemini")}
-          className={`flex-1 py-4 text-sm font-medium transition-colors ${
-            activeTab === "gemini" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
-          }`}
+          className={`flex-1 py-4 text-sm font-medium transition-colors ${activeTab === "gemini" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
+            }`}
         >
           Corrected (Gemini)
         </button>
         <button
           onClick={() => setActiveTab("arabic")}
-          className={`flex-1 py-4 text-sm font-medium transition-colors ${
-            activeTab === "arabic" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
-          }`}
+          className={`flex-1 py-4 text-sm font-medium transition-colors ${activeTab === "arabic" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
+            }`}
         >
           Translated Text
         </button>
         <button
           onClick={() => setActiveTab("braille")}
-          className={`flex-1 py-4 text-sm font-medium transition-colors ${
-            activeTab === "braille" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
-          }`}
+          className={`flex-1 py-4 text-sm font-medium transition-colors ${activeTab === "braille" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
+            }`}
         >
           Braille Unicode
         </button>
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 p-6 overflow-y-auto bg-gray-900 font-mono text-lg text-gray-200 whitespace-pre-wrap text-right" dir={activeTab !== "braille" && language === "arabic" ? "rtl" : "ltr"}>
-        {activeTab === "braille" && (braille || "No braille decoded yet.")}
+      <div
+        className={`flex-1 p-6 overflow-y-auto overflow-x-auto max-h-[500px] bg-gray-900 font-mono text-lg text-gray-200 leading-relaxed ${activeTab === 'braille' ? 'text-left whitespace-pre' : 'text-start whitespace-pre-wrap'}`}
+        dir={activeTab !== "braille" && language === "arabic" ? "rtl" : "ltr"}
+      >
+        {activeTab === "braille" && (formattedBraille || "No braille decoded yet.")}
         {activeTab === "arabic" && (arabic || "No translated text yet.")}
         {activeTab === "gemini" && (gemini || "No Gemini correction yet.")}
       </div>
@@ -175,9 +178,9 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
             ))}
           </select>
         </div>
-        
+
         <div className="flex space-x-3">
-          <button 
+          <button
             onClick={handlePlayAudio}
             disabled={!currentContent || !selectedVoice || isTtsLoading}
             className="flex-1 flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-500 text-white py-3 rounded-xl transition-all font-medium"
@@ -186,7 +189,7 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
             <span>{isTtsLoading ? "Generating..." : "Play Audio"}</span>
           </button>
 
-          <button 
+          <button
             onClick={handleDownload}
             disabled={!braille}
             className="flex-1 flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white py-3 rounded-xl transition-all font-medium"
@@ -195,7 +198,7 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
             <span>Download</span>
           </button>
         </div>
-        
+
         <audio ref={audioRef} className="hidden" controls />
       </div>
     </div>

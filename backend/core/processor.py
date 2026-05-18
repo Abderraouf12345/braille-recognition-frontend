@@ -1602,10 +1602,25 @@ def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, 
                         key=lambda k: sum(it['y'] for it in final_clusters[k])/len(final_clusters[k]))
     
     final_lines = []
+    prev_y = None
+
     for l_id in sorted_ids:
         # Standard Left-to-Right order for characters within the line
         cluster = sorted(final_clusters[l_id], key=lambda it: it['x'])
-        final_lines.append("".join([it['char'] for it in cluster]))
+        avg_y = sum(it['y'] for it in cluster) / len(cluster)
+        
+        line_str = "".join([it['char'] for it in cluster])
+        if not line_str.strip(' \t\n\r\u2800'):  # Only keep lines with actual dots
+            continue
+            
+        if prev_y is not None:
+            y_diff = avg_y - prev_y
+            num_newlines = int(round(y_diff / l_gap))
+            if num_newlines > 1:
+                final_lines.extend([""] * (num_newlines - 1))
+                
+        final_lines.append(line_str.rstrip('\u2800'))  # Remove trailing empty cells for cleaner output
+        prev_y = avg_y
 
     return "\n".join(final_lines), final_clusters
 
@@ -1764,10 +1779,10 @@ class BrailleProcessor:
         recto_concentrated_before_treshold, concentrated = apply_centroid_concentration_2(recto_concentrated_before_treshold, Dot_Diameter, median_1, Dot_Diameter)
         recto_concentrated = np.where(recto_concentrated_before_treshold == median_1, 255, 0).astype(np.uint8)
         recto_concentrated = remove_small_dots_binary(recto_concentrated, min_area=v1_norm/4)
-        search_min_h = int(v1_norm)
-        search_min_w = int(v1_norm)
+        search_min_h = int(Dot_Diameter)
+        search_min_w = int(Dot_Diameter)
         search_max_h = int(v1_norm * 7) 
-        search_max_w = int(v1_norm)
+        search_max_w = int(Dot_Diameter)
         top_vectors = find_top_k_self_translations(
             recto_concentrated,
             min_h=search_min_h,

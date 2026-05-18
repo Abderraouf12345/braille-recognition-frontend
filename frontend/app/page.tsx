@@ -10,7 +10,7 @@ import { Loader2 } from "lucide-react";
 export default function Dashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [corners, setCorners] = useState<{x: number, y: number}[]>([]);
-  const [lightAngle, setLightAngle] = useState(45);
+  const [lightAngle, setLightAngle] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState("arabic");

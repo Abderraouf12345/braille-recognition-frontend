@@ -62,9 +62,12 @@ async def process_image(
         pts_src = np.float32(pts_list)
         
         # Compute V from light angle
-        # lightAngle is in degrees
+        # lightAngle is in degrees, UI convention: 0° = top (12 o'clock), clockwise
+        # In image space, Y-axis points downward, so we use:
+        #   Vx = sin(angle)   (right at 90°)
+        #   Vy = -cos(angle)  (up at 0° because Y is flipped)
         angle_rad = np.radians(lightAngle)
-        V = np.array([np.cos(angle_rad), np.sin(angle_rad)])
+        V = np.array([np.sin(angle_rad), -np.cos(angle_rad)])
         
         # Run heavy processing in background thread (returns braille, arabic, corrected)
         loop = asyncio.get_running_loop()

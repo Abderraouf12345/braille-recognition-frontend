@@ -30,9 +30,10 @@ export default function LightDial({ angle, setAngle }: LightDialProps) {
     const dx = clientX - centerX;
     const dy = clientY - centerY;
     
-    // Calculate angle in degrees (0 is right, 90 is bottom)
-    let theta = Math.atan2(dy, dx) * (180 / Math.PI);
+    // Calculate angle in degrees (0 is top, 90 is right)
+    let theta = (Math.atan2(dy, dx) * (180 / Math.PI)) + 90;
     if (theta < 0) theta += 360;
+    if (theta >= 360) theta -= 360;
     
     setAngle(Math.round(theta));
   };
@@ -81,13 +82,13 @@ export default function LightDial({ angle, setAngle }: LightDialProps) {
         {/* Indicator Line */}
         <div 
           className="absolute top-1/2 left-1/2 w-1/2 h-0.5 bg-blue-500/50 origin-left pointer-events-none"
-          style={{ transform: `translateY(-50%) rotate(${angle}deg)` }}
+          style={{ transform: `translateY(-50%) rotate(${angle - 90}deg)` }}
         />
         
         {/* Lamp Icon Wrapper */}
         <div 
           className="absolute top-1/2 left-1/2 w-full h-full pointer-events-none"
-          style={{ transform: `translate(-50%, -50%) rotate(${angle}deg)` }}
+          style={{ transform: `translate(-50%, -50%) rotate(${angle - 90}deg)` }}
         >
           <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 bg-blue-500 p-2 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.6)]">
             <Sun className="w-5 h-5 text-white" />
