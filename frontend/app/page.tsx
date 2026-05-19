@@ -20,6 +20,7 @@ export default function Dashboard() {
     arabic: "",
     gemini: ""
   });
+  const [overlayImage, setOverlayImage] = useState<string | null>(null);
 
   const handleProcess = async () => {
     if (!imageFile || corners.length !== 4) return;
@@ -29,6 +30,7 @@ export default function Dashboard() {
     setIsGeminiLoading(false);
     setError(null);
     setResults({ braille: "", arabic: "", gemini: "" });
+    setOverlayImage(null);
 
     const formData = new FormData();
     formData.append("file", imageFile);
@@ -64,7 +66,9 @@ export default function Dashboard() {
           const jsonStr = trimmed.slice(5).trim();
           try {
             const event = JSON.parse(jsonStr);
-            if (event.type === "braille") {
+            if (event.type === "overlay") {
+              setOverlayImage(event.value);
+            } else if (event.type === "braille") {
               setResults(prev => ({ ...prev, braille: event.value }));
               setIsProcessing(false); // UI unlocked as soon as braille arrives
             } else if (event.type === "translation") {
@@ -108,9 +112,14 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col min-h-[500px] lg:min-h-0 relative">
           <ImageWorkspace 
             imageFile={imageFile} 
-            setImageFile={setImageFile} 
+            setImageFile={(file) => {
+              setImageFile(file);
+              if (!file) setOverlayImage(null);
+            }} 
             corners={corners} 
             setCorners={setCorners} 
+            overlayImage={overlayImage}
+            onClearOverlay={() => setOverlayImage(null)}
           />
         </div>
 

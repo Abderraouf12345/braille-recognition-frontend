@@ -14,9 +14,11 @@ interface ImageWorkspaceProps {
   setImageFile: (file: File | null) => void;
   corners: Point[];
   setCorners: (corners: Point[]) => void;
+  overlayImage?: string | null;
+  onClearOverlay?: () => void;
 }
 
-export default function ImageWorkspace({ imageFile, setImageFile, corners, setCorners }: ImageWorkspaceProps) {
+export default function ImageWorkspace({ imageFile, setImageFile, corners, setCorners, overlayImage, onClearOverlay }: ImageWorkspaceProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
@@ -75,6 +77,24 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
             }}
           />
         </label>
+      ) : overlayImage ? (
+        <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-black p-4">
+          <div className="relative w-full h-full flex items-center justify-center">
+            <img 
+              src={overlayImage} 
+              alt="Overlay Confirmation" 
+              className="max-w-full max-h-full object-contain pointer-events-none select-none"
+            />
+            {onClearOverlay && (
+              <button
+                onClick={onClearOverlay}
+                className="absolute bottom-4 right-4 bg-gray-800/90 hover:bg-gray-700 text-white px-4 py-2 rounded-xl border border-gray-700 shadow-md transition-all text-sm font-medium hover:scale-105 active:scale-95"
+              >
+                Edit Corners
+              </button>
+            )}
+          </div>
+        </div>
       ) : (
         <div 
           ref={containerRef}

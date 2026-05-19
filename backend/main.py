@@ -132,12 +132,14 @@ async def process_image_stream(
 
             # --- Stage 1: Run heavy image processing + dictionary translation ---
             loop = asyncio.get_running_loop()
-            braille_text, translated_text = await loop.run_in_executor(
+            braille_text, translated_text, overlay_image = await loop.run_in_executor(
                 executor,
                 processor.process,
                 img, pts_src, V, language
             )
 
+            # Yield overlay image immediately
+            yield f"data: {json.dumps({'type': 'overlay', 'value': overlay_image})}\n\n"
             # Yield braille immediately
             yield f"data: {json.dumps({'type': 'braille', 'value': braille_text})}\n\n"
             # Yield translation immediately

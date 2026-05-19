@@ -1374,7 +1374,7 @@ cv2.setUseOptimized(True)
 # ── Decode + translation functions ────────────────────────────────────────────
 
 def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, warped_rgb,
-                                       nv_dist=15, h_period=30, line_gap=60):
+                                       nv_dist=15, h_period=30, line_gap=60, language="arabic"):
     """
     Unified function: Pre-processing -> Inference -> Plotting -> Structural Assembly
     """
@@ -1453,19 +1453,60 @@ def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, 
             'char': char
         })
 
-    # # --- STEP E: PLOTTING (Inside the function) ---
-    # ax.imshow(warped_rgb)
-    # # Create rects from decoded_items which matches the indices of the inferred chars
-    # rects = [patches.Rectangle((it['x'], it['y']), it['w'], it['h']) for it in decoded_items]
-    # pc = PatchCollection(rects, match_original=False, edgecolor='white', facecolor='none', linewidths=1.0, alpha=0.5)
-    # ax.add_collection(pc)
+    # --- STEP E: PLOTTING (Inside the function) ---
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+    from matplotlib.collections import PatchCollection
+    import io
+    import base64
+    from .translator import translate_only
+
+    # Configure font support
+    matplotlib.rcParams['font.sans-serif'] = ['Arial', 'Segoe UI', 'DejaVu Sans', 'Segoe UI Symbol', 'sans-serif']
+    matplotlib.rcParams['font.family'] = 'sans-serif'
+
+    h_img, w_img = warped_rgb.shape[:2]
+    fig, ax = plt.subplots(figsize=(w_img/100, h_img/100), dpi=100)
+    ax.imshow(warped_rgb)
     
-    # for it in decoded_items:
-    #     if it['char'] == chr(0x2800): continue # Don't draw empty cells
-    #     ax.text(it['x'] + it['w'] / 2, it['y'] + 1, it['char'],
-    #             color='#FFFF00', fontsize=18, fontweight='bold', ha='center', va='top')
-    # ax.set_title(f"3-Channel Inference: {num_boxes} Characters", fontsize=20)
-    # ax.axis('off')
+    rects = [patches.Rectangle((it['x'], it['y']), it['w'], it['h']) for it in decoded_items]
+    pc = PatchCollection(rects, match_original=False, edgecolor='white', facecolor='none', linewidths=1.0, alpha=0.5)
+    ax.add_collection(pc)
+    
+    for it in decoded_items:
+        if it['char'] == chr(0x2800): continue # Don't draw empty cells
+        
+        if language.lower() == 'raw':
+            display_char = it['char']
+        else:
+            display_char = translate_only(it['char'], language=language)
+            if not display_char.strip():
+                display_char = it['char']
+                
+        # Select font based on character set to prevent tofu rendering
+        if 0x2800 <= ord(display_char[0]) <= 0x28FF:
+            font_name = 'DejaVu Sans'
+        else:
+            font_name = 'Arial'
+
+        # Position the label directly above the bounding box
+        ax.text(it['x'] + it['w'] / 2, it['y'] - 3, display_char,
+                color='#FFFF00', fontsize=14, fontweight='bold', ha='center', va='bottom',
+                fontname=font_name)
+                
+    ax.set_title(f"3-Channel Inference: {num_boxes} Characters", fontsize=20)
+    ax.axis('off')
+    
+    plt.subplots_adjust(top=0.9, bottom=0, right=1, left=0, hspace=0, wspace=0)
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format='jpeg', bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    overlay_image_base64 = f"data:image/jpeg;base64,{img_base64}"
 
     # 5. UNIVERSAL STRUCTURAL ASSEMBLER (Curves, Flat, Tables, & Orphans)
     import numpy as _np
@@ -1622,7 +1663,7 @@ def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, 
         final_lines.append(line_str.rstrip('\u2800'))  # Remove trailing empty cells for cleaner output
         prev_y = avg_y
 
-    return "\n".join(final_lines), final_clusters
+    return "\n".join(final_lines), final_clusters, overlay_image_base64
 
 
 
@@ -1953,15 +1994,16 @@ class BrailleProcessor:
         img3_src   = reconstruct_layer(recto_full, verso_full)
 
         # ── Decode ────────────────────────────────────────────────────────────
-        braille_text, _ = get_braille_text_content_ultra_fast(
+        braille_text, _, overlay_image = get_braille_text_content_ultra_fast(
             img1_src, img2_src, img3_src, final_boxes,
             _model_3ch, _device, warped_rgb,
             nv_dist=neighbors_vertical,
             h_period=period,
             line_gap=neighbors_vertical_mid_p,
+            language=language
         )
 
         # ── Translate (dictionary only — Gemini is handled by the stream endpoint) ──
         from .translator import translate_only
         translated = translate_only(braille_text, language=language)
-        return braille_text, translated
+        return braille_text, translated, overlay_image
