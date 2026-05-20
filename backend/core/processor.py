@@ -1370,6 +1370,12 @@ warmup_numba()
 from .model import model_3ch as _model_3ch, device as _device
 cv2.setUseOptimized(True)
 
+# ── Last-inference cache (used for overlay re-rendering) ──────────────────────
+_last_inference_cache = {
+    "warped_rgb": None,
+    "decoded_items": None,
+}
+
 
 # ── Decode + translation functions ────────────────────────────────────────────
 
@@ -1452,6 +1458,10 @@ def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, 
             'h': boxes[orig_idx]['h'], 
             'char': char
         })
+
+    # Cache for overlay re-rendering after auto-detect
+    _last_inference_cache["warped_rgb"] = warped_rgb
+    _last_inference_cache["decoded_items"] = decoded_items
 
     # --- STEP E: PLOTTING (Inside the function) ---
     import matplotlib
@@ -1664,6 +1674,86 @@ def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, 
         prev_y = avg_y
 
     return "\n".join(final_lines), final_clusters, overlay_image_base64
+
+
+def render_overlay_for_language(language: str) -> str:
+    """
+    Re-renders the annotation overlay for the most recent inference using a
+    different language. Returns a base64 data-URI string (same format as the
+    original overlay), or an empty string if no cached inference exists.
+
+    This is used by the auto-detect pipeline: the heavy ML processing runs once
+    with language='raw' to get Braille Unicode annotations quickly, then after
+    Gemini identifies the language, this function redraws the overlay with the
+    correct translated characters — without repeating the ML inference.
+    """
+    warped_rgb   = _last_inference_cache.get("warped_rgb")
+    decoded_items = _last_inference_cache.get("decoded_items")
+
+    if warped_rgb is None or not decoded_items:
+        return ""
+
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+    from matplotlib.collections import PatchCollection
+    import io
+    import base64
+    from .translator import translate_only
+
+    matplotlib.rcParams['font.sans-serif'] = [
+        'Arial', 'Segoe UI', 'DejaVu Sans', 'Segoe UI Symbol', 'sans-serif'
+    ]
+    matplotlib.rcParams['font.family'] = 'sans-serif'
+
+    h_img, w_img = warped_rgb.shape[:2]
+    fig, ax = plt.subplots(figsize=(w_img / 100, h_img / 100), dpi=100)
+    ax.imshow(warped_rgb)
+
+    rects = [
+        patches.Rectangle((it['x'], it['y']), it['w'], it['h'])
+        for it in decoded_items
+    ]
+    pc = PatchCollection(
+        rects, match_original=False,
+        edgecolor='white', facecolor='none', linewidths=1.0, alpha=0.5
+    )
+    ax.add_collection(pc)
+
+    for it in decoded_items:
+        if it['char'] == chr(0x2800):
+            continue  # skip empty cells
+
+        if language.lower() == 'raw':
+            display_char = it['char']
+        else:
+            display_char = translate_only(it['char'], language=language)
+            if not display_char.strip():
+                display_char = it['char']
+
+        if 0x2800 <= ord(display_char[0]) <= 0x28FF:
+            font_name = 'DejaVu Sans'
+        else:
+            font_name = 'Arial'
+
+        ax.text(
+            it['x'] + it['w'] / 2, it['y'] - 3, display_char,
+            color='#FFFF00', fontsize=14, fontweight='bold',
+            ha='center', va='bottom', fontname=font_name
+        )
+
+    num_boxes = len(decoded_items)
+    ax.set_title(f"3-Channel Inference: {num_boxes} Characters", fontsize=20)
+    ax.axis('off')
+    plt.subplots_adjust(top=0.9, bottom=0, right=1, left=0, hspace=0, wspace=0)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format='jpeg', bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    return f"data:image/jpeg;base64,{img_base64}"
 
 
 

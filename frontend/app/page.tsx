@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [lightAngle, setLightAngle] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeminiLoading, setIsGeminiLoading] = useState(false);
+  const [isAutoDetecting, setIsAutoDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState("arabic");
 
@@ -28,6 +29,7 @@ export default function Dashboard() {
     // isGeminiLoading is intentionally NOT set here — it activates only
     // after braille + translation are already rendered (see translation event below)
     setIsGeminiLoading(false);
+    setIsAutoDetecting(language === "auto");
     setError(null);
     setResults({ braille: "", arabic: "", gemini: "" });
     setOverlayImage(null);
@@ -71,6 +73,10 @@ export default function Dashboard() {
             } else if (event.type === "braille") {
               setResults(prev => ({ ...prev, braille: event.value }));
               setIsProcessing(false); // UI unlocked as soon as braille arrives
+            } else if (event.type === "detected_language") {
+              // Auto-detect: snap the language selector to the identified language
+              setLanguage(event.value); // "raw" if no match found
+              setIsAutoDetecting(false);
             } else if (event.type === "translation") {
               setResults(prev => ({ ...prev, arabic: event.value }));
               // Both braille and translation are now on screen — activate Gemini spinner
@@ -80,10 +86,12 @@ export default function Dashboard() {
               setIsGeminiLoading(false);
             } else if (event.type === "done") {
               setIsGeminiLoading(false);
+              setIsAutoDetecting(false);
             } else if (event.type === "error") {
               setError(event.value);
               setIsProcessing(false);
               setIsGeminiLoading(false);
+              setIsAutoDetecting(false);
             }
           } catch {
             // ignore malformed SSE lines
@@ -94,6 +102,7 @@ export default function Dashboard() {
       setError(err.message || "Failed to connect to the processing server.");
       setIsProcessing(false);
       setIsGeminiLoading(false);
+      setIsAutoDetecting(false);
     }
   };
 
@@ -120,6 +129,7 @@ export default function Dashboard() {
             setCorners={setCorners} 
             overlayImage={overlayImage}
             onClearOverlay={() => setOverlayImage(null)}
+            isLocked={isProcessing}
           />
         </div>
 
@@ -132,9 +142,10 @@ export default function Dashboard() {
             <h3 className="text-gray-400 text-sm font-medium mb-3">Translation Language</h3>
             <select
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(e) => { setLanguage(e.target.value); setIsAutoDetecting(false); }}
               className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 outline-none"
             >
+              <option value="auto">✨ Auto-Detect Language</option>
               <option value="arabic">Arabic — عربي</option>
               <option value="french">French — Français</option>
               <option value="english_g1">English G1 — Grade 1 (literal)</option>
@@ -142,6 +153,11 @@ export default function Dashboard() {
               <option value="russian">Russian — Русский</option>
               <option value="raw">Braille Unicode Only (No Dictionary)</option>
             </select>
+            {isAutoDetecting && (
+              <p className="text-blue-400 text-xs mt-2 flex items-center gap-1.5 animate-pulse">
+                <span>🔍</span> Detecting language via Gemini…
+              </p>
+            )}
           </div>
           
           <div className="mt-6">

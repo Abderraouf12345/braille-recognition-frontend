@@ -130,25 +130,52 @@ async def process_image_stream(
             angle_rad = np.radians(lightAngle)
             V = np.array([np.sin(angle_rad), -np.cos(angle_rad)])
 
-            # --- Stage 1: Run heavy image processing + dictionary translation ---
+            # --- Stage 1: Run heavy image processing ---
+            # Pass "raw" to the processor when auto-detecting so it returns
+            # only the Braille Unicode — translation will happen in Stage 2.
+            processor_language = "raw" if language.lower() == "auto" else language
             loop = asyncio.get_running_loop()
             braille_text, translated_text, overlay_image = await loop.run_in_executor(
                 executor,
                 processor.process,
-                img, pts_src, V, language
+                img, pts_src, V, processor_language
             )
 
-            # Yield overlay image immediately
+            # Yield overlay and braille immediately
             yield f"data: {json.dumps({'type': 'overlay', 'value': overlay_image})}\n\n"
-            # Yield braille immediately
             yield f"data: {json.dumps({'type': 'braille', 'value': braille_text})}\n\n"
-            # Yield translation immediately
-            yield f"data: {json.dumps({'type': 'translation', 'value': translated_text})}\n\n"
 
-            # --- Stage 2: Run Gemini correction asynchronously ---
-            if language.lower() == "raw":
+            # --- Stage 2: Translate / Auto-detect ---
+            if language.lower() == "auto":
+                from core.translator import auto_detect_and_translate
+                from core.processor import render_overlay_for_language
+                detected_lang, raw_translation, gemini_text = await loop.run_in_executor(
+                    executor,
+                    auto_detect_and_translate,
+                    braille_text
+                )
+                # Tell the frontend which language was identified
+                yield f"data: {json.dumps({'type': 'detected_language', 'value': detected_lang})}\n\n"
+                yield f"data: {json.dumps({'type': 'translation', 'value': raw_translation})}\n\n"
+                yield f"data: {json.dumps({'type': 'gemini', 'value': gemini_text})}\n\n"
+
+                # Re-render the overlay with the detected language's characters
+                # (if "raw", overlay stays as Braille Unicode — still correct)
+                if detected_lang != "raw":
+                    updated_overlay = await loop.run_in_executor(
+                        executor,
+                        render_overlay_for_language,
+                        detected_lang
+                    )
+                    if updated_overlay:
+                        yield f"data: {json.dumps({'type': 'overlay', 'value': updated_overlay})}\n\n"
+
+            elif language.lower() == "raw":
+                yield f"data: {json.dumps({'type': 'translation', 'value': translated_text})}\n\n"
                 yield f"data: {json.dumps({'type': 'gemini', 'value': ''})}\n\n"
+
             else:
+                yield f"data: {json.dumps({'type': 'translation', 'value': translated_text})}\n\n"
                 from core.translator import correct_text_with_gemini
                 import os as _os
                 key = _os.environ.get("GEMINI_API_KEY", "")

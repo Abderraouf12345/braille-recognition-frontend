@@ -16,9 +16,10 @@ interface ImageWorkspaceProps {
   setCorners: (corners: Point[]) => void;
   overlayImage?: string | null;
   onClearOverlay?: () => void;
+  isLocked?: boolean;
 }
 
-export default function ImageWorkspace({ imageFile, setImageFile, corners, setCorners, overlayImage, onClearOverlay }: ImageWorkspaceProps) {
+export default function ImageWorkspace({ imageFile, setImageFile, corners, setCorners, overlayImage, onClearOverlay, isLocked }: ImageWorkspaceProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
@@ -177,7 +178,7 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
               return (
                 <motion.div
                   key={i}
-                  drag
+                  drag={!isLocked}
                   dragMomentum={false}
                   onDrag={(_, info) => handleLocalDrag(info)}
                   initial={false}

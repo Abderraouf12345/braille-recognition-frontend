@@ -562,3 +562,113 @@ def translate_only(braille_text: str, language: str = "arabic") -> str:
         translated = translate_braille_to_arabic(braille_text)
 
     return translated
+
+
+# ── Auto-Detect Language ──────────────────────────────────────────────────────
+def auto_detect_and_translate(braille_text: str):
+    """
+    Transcribes Braille Unicode with all available dictionaries and sends a
+    single Gemini disambiguation prompt to identify the best-matching language.
+
+    Returns:
+        (detected_lang_key: str, raw_translation: str, gemini_corrected: str)
+
+    Where detected_lang_key is one of:
+        "arabic" | "french" | "english_g1" | "english_g2" | "russian" | "raw"
+
+    "raw" means no valid language was identified — caller should display
+    only the Braille Unicode.
+    """
+    # 1. Translate with every dictionary
+    candidates = {
+        "arabic":     translate_braille_to_arabic(braille_text),
+        "french":     translate_braille_to_french(braille_text),
+        "english_g1": translate_braille_to_english_g1(braille_text),
+        "english_g2": translate_braille_to_english_g2(braille_text),
+        "russian":    translate_braille_to_russian(braille_text),
+    }
+
+    # 2. Build a single disambiguation prompt
+    candidate_block = "\n".join(
+        f"[{lang}]: {text[:600]}"   # cap per-candidate to keep prompt short
+        for lang, text in candidates.items()
+    )
+
+    prompt = f"""You are a language expert analysing candidate transcriptions of a Braille document.
+Each candidate was produced by a different Braille dictionary (Arabic, French, English Grade 1,
+English Grade 2, Russian). Exactly one candidate (or none) represents a valid, semantically
+coherent text in that language.
+
+Your task:
+1. Identify which single candidate is the most semantically valid/readable text in its language.
+2. Return a JSON object on a single line — NO markdown, NO code fences, NO extra text.
+
+Format:
+{{"language": "<key>", "corrected": "<corrected text>"}}
+
+Where:
+- "language" is ONE of: arabic, french, english_g1, english_g2, russian
+- OR "none" if NO candidate is semantically valid
+- "corrected" is the lightly corrected version of the winning candidate
+  (fix obvious OCR/Braille errors; preserve the original language and meaning)
+- If language is "none", set "corrected" to ""
+
+Candidates:
+{candidate_block}
+"""
+
+    key = os.environ.get("GEMINI_API_KEY", GEMINI_API_KEY)
+    if not key:
+        print("⚠️  Auto-detect: GEMINI_API_KEY not set — falling back to raw mode.")
+        return "raw", braille_text, ""
+
+    config = types.GenerateContentConfig(
+        temperature=0.0,
+        max_output_tokens=1024,
+    )
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            client = _get_client()
+            print(f"🔍 Auto-detect: Gemini attempt {attempt + 1}/{max_retries}…")
+            t0 = time.time()
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=prompt,
+                config=config,
+            )
+            elapsed = time.time() - t0
+
+            raw_response = (response.text or "").strip()
+            print(f"✅ Auto-detect Gemini response ({elapsed:.2f}s): {raw_response[:120]}")
+
+            # Strip markdown code fences if present
+            import re as _re
+            cleaned = _re.sub(r"^```[a-z]*\n?|```$", "", raw_response, flags=_re.MULTILINE).strip()
+
+            import json as _json
+            parsed = _json.loads(cleaned)
+            detected_lang = parsed.get("language", "none").strip().lower()
+            corrected = parsed.get("corrected", "").strip()
+
+            if detected_lang == "none" or detected_lang not in candidates:
+                print("⚠️  Auto-detect: No valid language identified — raw fallback.")
+                return "raw", braille_text, ""
+
+            raw_translation = candidates[detected_lang]
+            print(f"🌐 Auto-detect: identified language = {detected_lang}")
+            return detected_lang, raw_translation, corrected
+
+        except Exception as e:
+            err = str(e)
+            if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                wait = 65 * (attempt + 1)
+                print(f"⚠️  Rate limit hit. Waiting {wait}s… (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+            else:
+                print(f"❌ Auto-detect Gemini error: {err}")
+                break
+
+    print("⚠️  Auto-detect: Gemini unavailable — raw fallback.")
+    return "raw", braille_text, ""
