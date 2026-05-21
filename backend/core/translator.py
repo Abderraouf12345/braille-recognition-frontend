@@ -239,7 +239,7 @@ def translate_braille_to_english_g1(braille_text):
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. ENGLISH GRADE 2
 # ─────────────────────────────────────────────────────────────────────────────
-def translate_braille_to_english_g2(braille_text):
+def translate_braille_to_english_g2(braille_text, single_cell_mode=False):
     """English Grade 2 — UEB with whole-word and part-word contractions."""
 
     # Whole-word contractions (standalone braille cell = full word)
@@ -248,26 +248,41 @@ def translate_braille_to_english_g2(braille_text):
         '⠑':  'every',      '⠋':  'from',        '⠛':  'go',
         '⠓':  'have',       '⠚':  'just',        '⠅':  'knowledge',
         '⠇':  'like',       '⠍':  'more',        '⠝':  'not',
-        '⠕':  'o',          '⠏':  'people',      '⠟':  'quite',
+        '⠏':  'people',      '⠟':  'quite',
         '⠗':  'rather',     '⠎':  'so',          '⠞':  'that',
         '⠥':  'us',         '⠧':  'very',        '⠺':  'will',
         '⠭':  'it',         '⠽':  'you',         '⠵':  'as',
         '⠯':  'and',        '⠿':  'for',         '⠷':  'of',
-        '⠮':  'the',        '⠾':  'with',        '⠡':  'child',
-        '⠩':  'shall',      '⠹':  'this',        '⠱':  'which',
-        '⠫':  'out',        '⠻':  'still',       '⠳':  'ou',
-        '⠣':  'gh',         '⠜':  'ar',          '⠌':  'st',
-        '⠬':  'ing',
+        '⠮':  'the',        '⠾':  'with',        
+        '⠡':  'child',      '⠩':  'shall',      '⠹':  'this',        
+        '⠱':  'which',      '⠳':  'out',         '⠌':  'still',
+        '⠢':  'enough',     '⠔':  'in',          '⠆':  'be',
     }
+
     # Part-word contractions (greedy longest-match within a word)
     part_contractions = {
-        '⠁⠃': 'ab',    '⠁⠉': 'ac',    '⠁⠋': 'af',    '⠁⠇': 'al',
-        '⠁⠍': 'am',    '⠁⠝': 'an',    '⠃⠇': 'ble',   '⠉⠊': 'ci',
-        '⠉⠕': 'com',   '⠙⠊': 'dis',   '⠑⠝': 'en',    '⠑⠗': 'er',
-        '⠋⠥': 'ful',   '⠛⠝': 'gn',    '⠊⠝': 'in',    '⠇⠑⠎': 'less',
-        '⠇⠽': 'ly',    '⠍⠑⠝': 'ment', '⠝⠑⠎': 'ness', '⠕⠥': 'ous',
-        '⠎⠓': 'sh',    '⠞⠓': 'th',    '⠺⠓': 'wh',
+        # Single-cell strong groupsigns
+        '⠡': 'ch',
+        '⠩': 'sh',
+        '⠹': 'th',
+        '⠱': 'wh',
+        '⠳': 'ou',
+        '⠪': 'ow',
+        '⠜': 'ar',
+        '⠫': 'ed',
+        '⠻': 'er',
+        '⠬': 'ing',
+        '⠌': 'st',
+        '⠣': 'gh',
+        '⠯': 'and',
+        '⠿': 'for',
+        '⠷': 'of',
+        '⠮': 'the',
+        '⠾': 'with',
+        '⠔': 'in',
+        '⠢': 'en',
     }
+
     braille_map = {
         '⠀': ' ',
         '⠁': 'a', '⠃': 'b', '⠉': 'c', '⠙': 'd', '⠑': 'e',
@@ -277,69 +292,113 @@ def translate_braille_to_english_g2(braille_text):
         '⠥': 'u', '⠧': 'v', '⠺': 'w', '⠭': 'x', '⠽': 'y',
         '⠵': 'z',
     }
+
     num_map = {
         '⠁': '1', '⠃': '2', '⠉': '3', '⠙': '4', '⠑': '5',
         '⠋': '6', '⠛': '7', '⠓': '8', '⠊': '9', '⠚': '0',
     }
+
     extra_map = {
         '⠂': ',', '⠆': ';', '⠒': ':', '⠲': '.', '⠖': '!',
         '⠦': '?', '⠤': '-', '⠶': '"', '⠄': "'",
     }
 
-    def decode_token(chars):
-        token_str = "".join(chars)
-        if token_str in word_contractions:
-            return word_contractions[token_str]
-        result = ""
+    def decode_token(token):
+        if not token:
+            return ""
+        
+        # 1. Count leading capitalization indicators
+        cap_count = 0
         i = 0
-        while i < len(chars):
+        while i < len(token) and token[i] == CAPITAL_INDICATOR:
+            cap_count += 1
+            i += 1
+            
+        remaining_token = token[i:]
+        if not remaining_token:
+            return CAPITAL_INDICATOR * cap_count
+            
+        # 2. Check for whole-word contractions (wordsigns) on the remaining part (only if not in single_cell_mode)
+        if not single_cell_mode:
+            word = word_contractions.get(remaining_token, None)
+            if word is not None:
+                if cap_count == 1:
+                    word = word.capitalize()
+                elif cap_count >= 2:
+                    word = word.upper()
+                return word
+
+        # 3. Decode character-by-character with contraction matching
+        result = ""
+        chars = list(remaining_token)
+        j = 0
+        number_mode = False
+        capital_mode = False
+        
+        while j < len(chars):
+            c = chars[j]
+            
+            if c == CAPITAL_INDICATOR:
+                capital_mode = True
+                j += 1
+                continue
+                
+            if c == NUMBER_INDICATOR:
+                number_mode = True
+                j += 1
+                continue
+                
+            if number_mode:
+                if c in num_map:
+                    result += num_map[c]
+                    j += 1
+                    continue
+                else:
+                    number_mode = False
+                    
+            # Check for part-word contractions (checking sizes 3, 2, 1)
             matched = False
-            for length in [3, 2]:
-                key = "".join(chars[i:i+length])
-                if key in part_contractions:
-                    result += part_contractions[key]
-                    i += length
-                    matched = True
-                    break
-            if not matched:
-                result += braille_map.get(chars[i], chars[i])
-                i += 1
+            for length in [3, 2, 1]:
+                if j + length <= len(chars):
+                    key = "".join(chars[j:j+length])
+                    if key in part_contractions:
+                        val = part_contractions[key]
+                        if capital_mode:
+                            val = val.capitalize()
+                            capital_mode = False
+                        result += val
+                        j += length
+                        matched = True
+                        break
+            if matched:
+                continue
+                
+            # Fallback to literal maps
+            if c in braille_map:
+                letter = braille_map[c]
+                if capital_mode:
+                    letter = letter.upper()
+                    capital_mode = False
+                result += letter
+            elif c in extra_map:
+                result += extra_map[c]
+            else:
+                result += c
+            j += 1
+            
+        # 4. Apply leading capitalization indicators
+        if cap_count == 1:
+            if result:
+                result = result[0].upper() + result[1:]
+        elif cap_count >= 2:
+            result = result.upper()
+            
         return result
 
     translated_lines = []
     for line in braille_text.split('\n'):
-        tokens = line.split('⠀')
-        output_tokens = []
-        for token in tokens:
-            chars = list(token)
-            capital = False
-            number  = False
-            out_chars = []
-            i = 0
-            while i < len(chars):
-                c = chars[i]
-                if c == CAPITAL_INDICATOR:
-                    capital = True;  i += 1; continue
-                if c == NUMBER_INDICATOR:
-                    number  = True;  i += 1; continue
-                if number and c in num_map:
-                    out_chars.append(num_map[c]); i += 1; continue
-                else:
-                    number = False
-                if c in braille_map:
-                    ch = braille_map[c]
-                    if capital:
-                        ch = ch.upper(); capital = False
-                    out_chars.append(ch)
-                elif c in extra_map:
-                    out_chars.append(extra_map[c])
-                else:
-                    out_chars.append(c)
-                i += 1
-            # Try contraction resolution on the raw token
-            resolved = word_contractions.get(token, decode_token(list(token)))
-            # Apply capitalisation flag if first char was capital
-            output_tokens.append(resolved)
+        tokens = line.split('⠀')  # Split by Braille space (U+2800)
+        output_tokens = [decode_token(t) for t in tokens]
         translated_lines.append(" ".join(output_tokens))
     return "\n".join(translated_lines)
 
@@ -490,8 +549,12 @@ TEXT TO CORRECT:
         except Exception as e:
             err = str(e)
             if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                wait = 65 * (attempt + 1)
-                print(f"\u26a0\ufe0f  Rate limit hit. Waiting {wait}s... (attempt {attempt + 1}/{max_retries})")
+                wait = 3 * (attempt + 1)
+                print(f"\u26a0\ufe0f  Rate limit hit. Retrying in {wait}s... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+            elif "503" in err or "UNAVAILABLE" in err or "experiencing high demand" in err:
+                wait = 3 * (attempt + 1)
+                print(f"\u26a0\ufe0f  Google servers overloaded (503/UNAVAILABLE). Retrying in {wait}s... (attempt {attempt + 1}/{max_retries})")
                 time.sleep(wait)
             else:
                 print(f"\u274c Gemini error: {err}")
@@ -536,7 +599,7 @@ def translate_results(braille_text: str, language: str = "arabic"):
     return translated, corrected
 
 
-def translate_only(braille_text: str, language: str = "arabic") -> str:
+def translate_only(braille_text: str, language: str = "arabic", single_cell_mode: bool = None) -> str:
     """
     Translates braille text to the specified language using the dictionary ONLY.
     Does NOT call the Gemini API. Use this for fast, synchronous translation
@@ -544,6 +607,9 @@ def translate_only(braille_text: str, language: str = "arabic") -> str:
     Returns translated_text string.
     """
     lang = language.lower()
+
+    if single_cell_mode is None:
+        single_cell_mode = (len(braille_text) == 1)
 
     if lang == "arabic":
         translated = translate_braille_to_arabic(braille_text)
@@ -553,7 +619,7 @@ def translate_only(braille_text: str, language: str = "arabic") -> str:
     elif lang == "english_g1":
         translated = translate_braille_to_english_g1(braille_text)
     elif lang == "english_g2":
-        translated = translate_braille_to_english_g2(braille_text)
+        translated = translate_braille_to_english_g2(braille_text, single_cell_mode=single_cell_mode)
     elif lang == "russian":
         translated = translate_braille_to_russian(braille_text)
     elif lang == "raw":
@@ -594,27 +660,22 @@ def auto_detect_and_translate(braille_text: str):
         for lang, text in candidates.items()
     )
 
-    prompt = f"""You are a language expert analysing candidate transcriptions of a Braille document.
-Each candidate was produced by a different Braille dictionary (Arabic, French, English Grade 1,
-English Grade 2, Russian). Exactly one candidate (or none) represents a valid, semantically
-coherent text in that language.
+    prompt = f"""You are analyzing candidate transcriptions of a Braille sheet to identify the correct language.
 
-Your task:
-1. Identify which single candidate is the most semantically valid/readable text in its language.
-2. Return a JSON object on a single line — NO markdown, NO code fences, NO extra text.
+The candidates are:
+{candidate_block}
+
+Task:
+Evaluate each candidate above. Identify if exactly ONE candidate is a cohesive, readable, and meaningful human text in its target language.
+
+Rules:
+1. If ONE candidate is clearly readable and makes perfect sense, return its key: "arabic", "french", "english_g1", "english_g2", or "russian".
+2. If ALL candidates are mostly gibberish, random letter noise, scattered punctuation, disjointed words, or contain raw untranslated Braille Unicode symbols (such as ⠛, ⠪, ⠈, ⠬, ⠠, ⠼), you MUST return "none".
+3. Default to "none" if there is any doubt, if the text is noisy dot output, or if it consists of meaningless character sequences. Never choose a language key just because a candidate uses that language's alphabet/script; the words themselves MUST form actual, coherent, and readable human sentences.
 
 Format:
-{{"language": "<key>", "corrected": "<corrected text>"}}
-
-Where:
-- "language" is ONE of: arabic, french, english_g1, english_g2, russian
-- OR "none" if NO candidate is semantically valid
-- "corrected" is the lightly corrected version of the winning candidate
-  (fix obvious OCR/Braille errors; preserve the original language and meaning)
-- If language is "none", set "corrected" to ""
-
-Candidates:
-{candidate_block}
+Return a single-line JSON object (no markdown, no code fences):
+{{"reasoning": "<1-sentence quality assessment>", "language": "<chosen_key_or_none>", "corrected": "<corrected_text_or_empty>"}}
 """
 
     key = os.environ.get("GEMINI_API_KEY", GEMINI_API_KEY)
@@ -663,8 +724,12 @@ Candidates:
         except Exception as e:
             err = str(e)
             if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                wait = 65 * (attempt + 1)
-                print(f"⚠️  Rate limit hit. Waiting {wait}s… (attempt {attempt + 1}/{max_retries})")
+                wait = 3 * (attempt + 1)
+                print(f"⚠️  Rate limit hit. Retrying in {wait}s... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+            elif "503" in err or "UNAVAILABLE" in err or "experiencing high demand" in err:
+                wait = 3 * (attempt + 1)
+                print(f"⚠️  Google servers overloaded (503/UNAVAILABLE). Retrying in {wait}s... (attempt {attempt + 1}/{max_retries})")
                 time.sleep(wait)
             else:
                 print(f"❌ Auto-detect Gemini error: {err}")

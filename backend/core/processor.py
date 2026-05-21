@@ -1915,7 +1915,7 @@ class BrailleProcessor:
         search_max_h = int(v1_norm * 7) 
         search_max_w = int(Dot_Diameter)
         top_vectors = find_top_k_self_translations(
-            recto_concentrated,
+            recto_2,
             min_h=search_min_h,
             min_w=search_min_w,
             max_h=search_max_h,
@@ -1927,7 +1927,7 @@ class BrailleProcessor:
         search_max_h = int(v1_norm)
         search_max_w = int(v_near * 3)
         top_vectors = find_top_k_self_translations(
-            recto_concentrated,
+            recto_2,
             min_h=search_min_h,
             min_w=search_min_w,
             max_h=search_max_h,
