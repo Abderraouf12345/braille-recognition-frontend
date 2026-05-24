@@ -151,6 +151,8 @@ export default function Dashboard() {
               <option value="english_g1">English G1 — Grade 1 (literal)</option>
               <option value="english_g2">English G2 — Grade 2 (contrac.)</option>
               <option value="russian">Russian — Русский</option>
+              <option value="chinese">Chinese — 中文</option>
+              <option value="shuangpin">Shuangpin — 汉语双拼盲文</option>
               <option value="raw">Braille Unicode Only (No Dictionary)</option>
             </select>
             {isAutoDetecting && (

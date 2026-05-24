@@ -466,6 +466,445 @@ def translate_braille_to_russian(braille_text):
     return "\n".join(translated_lines)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. CHINESE  (现行盲文 / Mainland Chinese Braille → Hanyu Pinyin)
+# ─────────────────────────────────────────────────────────────────────────────
+def translate_braille_to_chinese(braille_text):
+    """
+    Mainland Chinese Braille (现行盲文) — Phonetic Pinyin decoder.
+
+    Each syllable: [Initial?] + [Final] + [Tone? (skipped)]
+    Output: Hanyu Pinyin text. Gemini then converts to Simplified Chinese (Hanzi).
+
+    Bug-fixes vs v1:
+      - Core phonetic mapping tables updated to standard Mainland Chinese Braille.
+      - Core finals mapped unambiguously. Tone marks (⠂, ⠄, ⠆) skipped correctly.
+      - Numeric mode (⠼) supported, decoding digit sequences cleanly.
+      - ü → u after j/q/x (standard Pinyin: xue not xüe).
+      - Punctuation / indicator cells mapped correctly.
+    """
+    # ── 18 Initial cells (声母) ────────────────────────────────────────────
+    INITIALS = {
+        '⠃': 'b',  '⠏': 'p',  '⠍': 'm',  '⠋': 'f',
+        '⠙': 'd',  '⠞': 't',  '⠝': 'n',  '⠇': 'l',
+        '⠛': 'g',  '⠅': 'k',  '⠓': 'h',   # also j/q/x before i/ü
+        '⠌': 'zh', '⠟': 'ch', '⠱': 'sh', '⠚': 'r',
+        '⠵': 'z',  '⠉': 'c',  '⠎': 's',
+    }
+    PALATAL_CELLS = {'⠛', '⠅', '⠓'}
+    PALATAL_MAP   = {'g': 'j', 'k': 'q', 'h': 'x'}
+
+    # Finals starting with i/ü to trigger palatalization of g/k/h -> j/q/x
+    PALATAL_FINALS = {
+        '⠊', '⠫', '⠑', '⠜', '⠩', '⠭', '⠡', '⠣', '⠹', '⠳',
+        '⠬', '⠾', '⠯', '⠸'
+    }
+
+    # Unambiguous finals (same reading regardless of preceding initial)
+    FINALS_UNAMB = {
+        '⠁': 'a',
+        '⠢': 'e',
+        '⠕': 'uo', # o after b/p/m/f, uo elsewhere (handled contextually)
+        '⠪': 'ai',
+        '⠖': 'ao',
+        '⠮': 'ei',
+        '⠷': 'ou',
+        '⠧': 'an',
+        '⠴': 'en',
+        '⠦': 'ang',
+        '⠼': 'eng',
+        '⠗': 'er',
+
+        '⠊': 'i',
+        '⠫': 'ia',
+        '⠑': 'ie',
+        '⠜': 'iao',
+        '⠩': 'ian',
+        '⠭': 'iang',
+        '⠡': 'ing',  # dots 1-6   (was incorrectly 'in')
+        '⠣': 'in',   # dots 1-2-6 (was incorrectly 'ing')
+        '⠹': 'iong',
+        '⠳': 'iu',
+
+        '⠥': 'u',
+        '⠿': 'ua',
+        '⠽': 'uai',
+        '⠺': 'ui',
+        '⠻': 'uan',
+        '⠒': 'un',
+        '⠶': 'uang',
+        '⠲': 'ong',
+
+        '⠬': 'ü',
+        '⠾': 'üe',
+        '⠯': 'üan',
+        '⠸': 'ün',
+    }
+
+    SILENT_I_INITIALS = {'zh', 'ch', 'sh', 'r', 'z', 'c', 's'}
+
+    ZERO_INIT = {
+        'a':'a',    'ai':'ai',   'an':'an',    'ang':'ang',  'ao':'ao',
+        'e':'e',    'ei':'ei',   'en':'en',    'eng':'eng',  'er':'er',
+        'i':'yi',   'ia':'ya',   'ian':'yan',  'iang':'yang', 'iao':'yao',
+        'ie':'ye',  'in':'yin',  'ing':'ying', 'iong':'yong', 'iu':'you',
+        'o':'o',    'ong':'weng',
+        'ou':'ou',
+        'u':'wu',   'ua':'wa',   'uai':'wai',  'uan':'wan',  'uang':'wang',
+        'ui':'wei', 'un':'wen',  'uo':'wo',
+        'ü':'yu',   'üan':'yuan', 'üe':'yue',  'ün':'yun',
+    }
+
+    # ── Abbreviations (现行盲文简写词) ──────────────────────────────
+    SINGLE_ABBREV = {
+        'b': 'bu',    # 不
+        'd': 'de',    # 的
+        'g': 'ge',    # 个
+        'h': 'he',    # 和
+        't': 'ta',    # 他/她/它
+        'l': 'le',    # 了
+        'p': 'pi',    # 批 / 平
+        'f': 'fa',    # 发 / 否 / 佛
+        'm': 'men',   # 们
+        'n': 'na',    # 那 / 呢
+        'zh': 'zhe',  # 这
+        's': 'shi',   # 是
+        'r': 'ri',    # 日
+        'c': 'cong',  # 从
+        'z': 'zai',   # 在
+    }
+
+    MULTI_ABBREV = {
+        ('t', 'b'): 'te bie',      # 特别
+        ('b', 'c'): 'bi ci',       # 彼此
+        ('g', 'm'): 'ge ming',     # 革命
+        ('zh', 'zh'): 'zheng zhi', # 政治
+    }
+
+
+    NUM_MAP = {
+        '⠁': '1', '⠃': '2', '⠉': '3', '⠙': '4', '⠑': '5',
+        '⠋': '6', '⠛': '7', '⠓': '8', '⠊': '9', '⠚': '0'
+    }
+
+    # Two-cell punctuation
+    TWO_PUNCT = {
+        '⠐⠆': '。', '⠐⠄': '，', '⠐⠂': '、',
+        '⠒⠒': '：', '⠰⠦': '？', '⠰⠖': '！',
+        '⠰⠤': '——', '⠠⠤': '——', '⠰⠆': '；',
+        '⠦⠴': '“”', '⠘⠦': '“',  '⠸⠴': '”',
+        '⠐⠤': '…',  '⠠⠠': '《', '⠠⠄': '》',
+        '⠐⠦': '（', '⠐⠴': '）',   # parentheses
+        '⠠⠦': '"', '⠠⠴': '"',    # alternative quote form
+    }
+
+    # Single-cell: map to symbol or '' to discard
+    ONE_SP = {
+        '⠀': ' ',
+        '⠤': '-',
+        '⠐': '',   '⠰': '',
+        '⠈': '',   '⠘': '',
+        '⠠': '',
+        # '⠼' is handled contextually in number mode
+        '⠂': '',   '⠄': '',   '⠆': '',
+    }
+
+    def _syl(init, fin):
+        """Build Pinyin syllable; after j/q/x drop diaeresis on ü."""
+        if init in ('j', 'q', 'x'):
+            fin = fin.replace('ü', 'u')
+        return init + fin
+
+    def _decode(chars):
+        out = []
+        i, n = 0, len(chars)
+        number_mode = False
+
+        while i < n:
+            c = chars[i]
+
+            # ── number mode processing ─────────────────────────────────────
+            if number_mode:
+                if c in NUM_MAP:
+                    out.append(NUM_MAP[c])
+                    i += 1
+                    continue
+                else:
+                    number_mode = False
+
+            # ── number indicator ───────────────────────────────────────────
+            if c == '⠼':
+                if i + 1 < n and chars[i+1] in NUM_MAP:
+                    number_mode = True
+                    i += 1
+                    continue
+
+            # two-cell punct
+            two = c + chars[i+1] if i+1 < n else ''
+            if two in TWO_PUNCT:
+                out.append(TWO_PUNCT[two]); i += 2; continue
+            # single-cell special
+            if c in ONE_SP:
+                s = ONE_SP[c]
+                if s: out.append(s)
+                i += 1; continue
+            # Initial
+            if c in INITIALS:
+                init_raw = INITIALS[c]; i += 1
+                if i >= n or chars[i] not in FINALS_UNAMB:
+                    # Check for multi-cell abbreviations (two consecutive isolated initials)
+                    if i < n and chars[i] in INITIALS:
+                        next_init = INITIALS[chars[i]]
+                        # ensure the next initial is also isolated
+                        if i + 1 >= n or chars[i+1] not in FINALS_UNAMB:
+                            combo = (init_raw, next_init)
+                            if combo in MULTI_ABBREV:
+                                out.append(MULTI_ABBREV[combo])
+                                i += 1  # consume the second initial
+                                continue
+
+                    # Single-cell processing
+                    if init_raw in SILENT_I_INITIALS:
+                        out.append(init_raw + 'i')
+                    elif init_raw in SINGLE_ABBREV:
+                        out.append(SINGLE_ABBREV[init_raw])
+                    else:
+                        out.append(init_raw)
+                    continue
+                fc = chars[i]
+                is_pal = c in PALATAL_CELLS and fc in PALATAL_FINALS
+                init_py = PALATAL_MAP.get(init_raw, init_raw) if is_pal else init_raw
+                # resolve final
+                fin = FINALS_UNAMB[fc]
+                if fc == '⠕':
+                    fin = 'o' if init_py in ('b','p','m','f') else 'uo'
+                i += 1
+                if i < n and chars[i] in ('⠂', '⠄', '⠆'): i += 1
+                out.append(_syl(init_py, fin) if fin else init_py)
+                continue
+            # Zero-initial final
+            if c in FINALS_UNAMB:
+                fin = FINALS_UNAMB[c]; i += 1
+                if i < n and chars[i] in ('⠂', '⠄', '⠆'): i += 1
+                out.append(ZERO_INIT.get(fin, fin)); continue
+            i += 1  # unknown: skip
+
+        # Join tokens with space except for consecutive digits/punctuation
+        result = []
+        for token in out:
+
+            if not result:
+                result.append(token)
+            else:
+                last = result[-1]
+                if (last.isdigit() and token.isdigit()) or last == ' ' or token == ' ' or \
+                   last in TWO_PUNCT.values() or token in TWO_PUNCT.values() or \
+                   last in ONE_SP.values() or token in ONE_SP.values():
+                    result.append(token)
+                else:
+                    result.append(' ' + token)
+        return ''.join(result)
+
+    lines = []
+    for line in braille_text.split('\n'):
+        lines.append('' if not line.strip() else _decode(list(line)))
+    return '\n'.join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. CHINESE  (汉语双拼盲文 / Two-Cell Chinese Braille → Hanyu Pinyin)
+# ─────────────────────────────────────────────────────────────────────────────
+def translate_braille_to_shuangpin(braille_text):
+    """
+    Two-Cell Chinese Braille (汉语双拼盲文 Shuangpin) — Phonetic Pinyin decoder.
+    Every syllable is strictly two cells: Cell 1 (Onset+Medial) + Cell 2 (Rime+Tone).
+    """
+    ONSETS = {
+        '⠾': '',   '⠊': 'b',  '⠦': 'p',  '⠪': 'm',  '⠖': 'f',
+        '⠌': 'd',  '⠎': 't',  '⠏': 'n',  '⠇': 'l',  '⠁': 'g',
+        '⠅': 'k',  '⠃': 'h',  '⠉': 'zh', '⠍': 'ch', '⠋': 'sh', '⠔': 'r',
+        '⠒': 'y',  '⠚': 'bi', '⠶': 'pi', '⠺': 'mi',
+        '⠜': 'di', '⠞': 'ti', '⠟': 'ni', '⠗': 'li',
+        '⠑': 'ji',  '⠕': 'qi',  '⠓': 'xi',  '⠙': 'z',  '⠝': 'c',  '⠛': 's',
+        '⠢': 'w',  '⠬': 'du', '⠮': 'tu', '⠯': 'nu', '⠧': 'lu',
+        '⠡': 'gu', '⠥': 'ku', '⠣': 'hu', '⠩': 'zhu','⠭': 'chu','⠫': 'shu','⠴': 'ru',
+        '⠲': 'yu', '⠿': 'nü', '⠷': 'lü', '⠱': 'ju', '⠵': 'qu', '⠳': 'xu',
+        '⠹': 'zu', '⠽': 'cu', '⠻': 'su'
+    }
+
+    RIMES = {
+        '⠃': 'i/u/ü', '⠚': 'a', '⠊': 'e/o', '⠛': 'ai', '⠌': 'ei', '⠓': 'ao', '⠉': 'ou', '⠋': 'an', '⠁': 'en', '⠙': 'ang', '⠑': 'eng',
+        '⠇': 'i/u/ü', '⠞': 'a', '⠎': 'e/o', '⠟': 'ai', '⠜': 'ei', '⠗': 'ao', '⠍': 'ou', '⠏': 'an', '⠅': 'en', '⠝': 'ang', '⠕': 'eng',
+        '⠣': 'i/u/ü', '⠺': 'a', '⠪': 'e/o', '⠻': 'ai', '⠬': 'ei', '⠳': 'ao', '⠩': 'ou', '⠫': 'an', '⠡': 'en', '⠹': 'ang', '⠱': 'eng',
+        '⠧': 'i/u/ü', '⠾': 'a', '⠮': 'e/o', '⠿': 'ai', '⠼': 'ei', '⠷': 'ao', '⠭': 'ou', '⠯': 'an', '⠥': 'en', '⠽': 'ang', '⠵': 'eng',
+        '⠆': 'i/u/ü'
+    }
+
+    PUNCTUATION = {
+        '⠐⠆': '。', '⠐⠄': '？', '⠐⠂': '、', '⠰⠂': '！',
+        '⠠⠄': '：', '⠰⠆': '；', '⠐⠐⠐': '……', '⠤': '—',
+        '⠰⠄': '「', '⠠⠆': '」', '⠐⠤': '《', '⠤⠂': '》',
+        '⠰⠤': '（', '⠤⠆': '）', '⠰': '；',
+        '⠐': '，', '⠠': '、'
+    }
+
+    CONTRACTIONS = {
+        '⠌⠔': 'de',
+        '⠉⠔': 'zhe',
+        '⠘⠙': 'zai',
+        '⠈⠙': 'zai',
+        '⠌': 'de',
+        '⠜': 'de',
+        '⠟': 'ni',
+        '⠋': 'shi',
+        '⠭': 'you',
+        '⠓': 'yao',
+        '⠣': 'shi',
+        '⠮': 'ye',
+        '⠱': 'jiu',
+        '⠂': 'men',
+        '⠙': 'zai',
+        '⠔': 'r',
+        '⠇': 'le',
+        '⠪': 'me',
+        '⠴': 'ne',
+        '⠆': 'ba',
+        '⠒': 'yi',
+        '⠾': 'a',
+        '⠁': 'ge',
+        '⠊': 'bu',
+        '⠦': 'pi',
+        '⠖': 'fu',
+        '⠎': 'ta',
+        '⠏': 'ni',
+        '⠅': 'ke',
+        '⠃': 'he',
+        '⠍': 'chu',
+        '⠝': 'ci',
+        '⠛': 'suo',
+        '⠢': 'wo'
+    }
+
+    NUM_MAP = {
+        '⠁': '1', '⠃': '2', '⠉': '3', '⠙': '4', '⠑': '5',
+        '⠋': '6', '⠛': '7', '⠓': '8', '⠊': '9', '⠚': '0'
+    }
+
+    def resolve_syllable(onset, rime):
+        # 1. Handle i/u/ü rime
+        if rime == 'i/u/ü':
+            if onset == 'y': return 'yi'
+            if onset == 'w': return 'wu'
+            if onset.endswith('i') or onset.endswith('u') or onset.endswith('ü'): 
+                return onset
+            if onset in ('b', 'p', 'm', 'f'): return onset + 'u'
+            if onset in ('zh', 'ch', 'sh', 'r', 'z', 'c', 's'): return onset + 'i'
+            return onset + 'i'
+            
+        # 2. Handle e/o rime
+        if rime == 'e/o':
+            if onset in ('b', 'p', 'm', 'f', 'w'): return onset + 'o'
+            if onset == 'y': return 'ye'
+            if onset in ('ju', 'qu', 'xu', 'yu'): return onset[:-1] + 'ue'
+            if onset.endswith('i'): return onset + 'e'
+            if onset.endswith('ü'): return onset + 'e'
+            if onset.endswith('u'): return onset[:-1] + 'uo'
+            return onset + 'e'
+            
+        # 3. Concatenate and apply Pinyin orthography adjustments
+        res = onset + rime
+        
+        # Adjustments for eng group (eng, ing, ong, iong)
+        if rime == 'eng':
+            if onset == 'y': return 'ying'
+            if onset == 'yu': return 'yong'
+            if onset in ('ju', 'qu', 'xu'): return onset[:-1] + 'iong'
+            if onset.endswith('i'): return onset[:-1] + 'ing'
+            if onset.endswith('u'): return onset[:-1] + 'ong'
+            
+        # Adjustments for en group (en, in, un, ün)
+        elif rime == 'en':
+            if onset == 'y': return 'yin'
+            if onset == 'yu': return 'yun'
+            if onset.endswith('i'): return onset[:-1] + 'in'
+            if onset.endswith('u'): return onset[:-1] + 'un'
+            if onset.endswith('ü'): return onset[:-1] + 'ün'
+            
+        # Triphthong reductions (iou -> iu, uei -> ui)
+        if 'iou' in res:
+            res = res.replace('iou', 'iu')
+        if 'uei' in res:
+            res = res.replace('uei', 'ui')
+            
+        # Standard duplicate vowel cleaning
+        res = res.replace('ii', 'i').replace('uu', 'u').replace('üü', 'ü')
+        
+        return res
+
+    text = braille_text.replace('⠀', ' ')
+    out = []
+    i = 0
+    number_mode = False
+    while i < len(text):
+        c1 = text[i]
+        
+        if number_mode:
+            if c1 in NUM_MAP:
+                out.append(NUM_MAP[c1])
+                i += 1; continue
+            else:
+                number_mode = False
+                
+        if c1 == '⠼':
+            if i + 1 < len(text) and text[i+1] in NUM_MAP:
+                number_mode = True
+                i += 1; continue
+        
+        if c1 == '⠈':
+            i += 1; continue
+            
+        if i + 2 < len(text) and text[i:i+3] in PUNCTUATION:
+            out.append(PUNCTUATION[text[i:i+3]])
+            i += 3; continue
+        if i + 1 < len(text) and text[i:i+2] in PUNCTUATION:
+            out.append(PUNCTUATION[text[i:i+2]])
+            i += 2; continue
+        if c1 in PUNCTUATION:
+            out.append(PUNCTUATION[c1])
+            i += 1; continue
+            
+        if c1 in (' ', '\n', '-', '》', '5', '？'):
+            out.append(c1)
+            i += 1; continue
+            
+        # 1. Standard Syllable
+        if i + 1 < len(text):
+            c2 = text[i+1]
+            if c1 in ONSETS and c2 in RIMES:
+                out.append(resolve_syllable(ONSETS[c1], RIMES[c2]))
+                i += 2
+                continue
+                
+        # 2. Contractions & Abbreviations
+        if i + 1 < len(text) and text[i:i+2] in CONTRACTIONS:
+            out.append(CONTRACTIONS[text[i:i+2]])
+            i += 2
+            continue
+            
+        if c1 in CONTRACTIONS:
+            val = CONTRACTIONS[c1]
+            if val == 'r' and out and out[-1] not in (' ', '\n', '，', '。', '、', '？', '！', '—', '：', '；', '…', '《', '》', '（', '）', '「', '」', '·'):
+                out[-1] = out[-1] + 'r'
+            else:
+                out.append(val)
+            i += 1; continue
+            
+        out.append(c1)
+        i += 1
+        
+    return ' '.join(out).replace('  ', ' ')
+
 # ════════════════════════════════════════════════════════════════════════════════
 # LANGUAGE SELECTOR — interactive prompt at runtime
 # ════════════════════════════════════════════════════════════════════════════════
@@ -477,6 +916,8 @@ translators = {
     "3": ("English G1 — Grade 1 (literal)",  translate_braille_to_english_g1),
     "4": ("English G2 — Grade 2 (contrac.)", translate_braille_to_english_g2),
     "5": ("Russian    — Русский",            translate_braille_to_russian),
+    "6": ("Chinese    — 中文",               translate_braille_to_chinese),
+    "7": ("Shuangpin  — 汉语双拼盲文",         translate_braille_to_shuangpin),
 }
 
 lang_keys = {
@@ -485,6 +926,8 @@ lang_keys = {
     "3": "english_g1",
     "4": "english_g2",
     "5": "russian",
+    "6": "chinese",
+    "7": "shuangpin",
 }
 
 
@@ -503,8 +946,30 @@ def _get_client():
     return _gemini_client
 
 
-def correct_text_with_gemini(input_text):
-    prompt = """You are correcting text extracted from a Braille recognition system.
+def correct_text_with_gemini(input_text, language: str = ""):
+    is_chinese = language.lower() in ("chinese", "shuangpin")
+
+    if is_chinese:
+        prompt = """You are converting Hanyu Pinyin syllables extracted from a Chinese Braille recognition system into natural Simplified Chinese characters (Hanzi).
+
+The input is space-separated Pinyin syllables decoded from Mainland Chinese Braille (现行盲文).
+Tones are absent or unreliable — use context and common vocabulary to select the correct characters.
+
+Rules:
+1. Convert every Pinyin syllable (or run of syllables) into the most contextually appropriate Simplified Chinese Hanzi.
+2. Add correct punctuation where natural sentence boundaries are evident.
+3. Preserve line breaks from the original text.
+4. Do NOT output Pinyin — output ONLY Hanzi (plus punctuation and spaces as needed).
+5. The input may contain residual abbreviated consonants or phonetic fragments (e.g. 'd' for 的, 'f' for 佛/非, 't b' for 特别) due to Braille shorthand. Expand them logically based on context.
+6. If a run of syllables is incomprehensible even as Chinese, output them as-is.
+7. Syllables containing ü (e.g. lü, nü) are valid Pinyin; convert them correctly.
+
+Output the Hanzi text only, no comments or explanations.
+
+PINYIN TO CONVERT:
+""" + input_text
+    else:
+        prompt = """You are correcting text extracted from a Braille recognition system.
 The text may contain Arabic, French, English, or Russian.
 
 Fix all errors so the text is fully readable and correct in each language.
@@ -583,6 +1048,10 @@ def translate_results(braille_text: str, language: str = "arabic"):
         translated = translate_braille_to_english_g2(braille_text)
     elif lang == "russian":
         translated = translate_braille_to_russian(braille_text)
+    elif lang == "chinese":
+        translated = translate_braille_to_chinese(braille_text)
+    elif lang == "shuangpin":
+        translated = translate_braille_to_shuangpin(braille_text)
     elif lang == "raw":
         # Raw mode: bypass translation and Gemini correction entirely
         print("🔵 Raw mode selected — skipping translation and Gemini correction.")
@@ -592,7 +1061,7 @@ def translate_results(braille_text: str, language: str = "arabic"):
 
     key = os.environ.get("GEMINI_API_KEY", GEMINI_API_KEY)
     if key:
-        corrected = correct_text_with_gemini(translated)
+        corrected = correct_text_with_gemini(translated, language=lang)
     else:
         corrected = "Gemini API key not configured. Unable to perform correction."
 
@@ -622,6 +1091,10 @@ def translate_only(braille_text: str, language: str = "arabic", single_cell_mode
         translated = translate_braille_to_english_g2(braille_text, single_cell_mode=single_cell_mode)
     elif lang == "russian":
         translated = translate_braille_to_russian(braille_text)
+    elif lang == "chinese":
+        translated = translate_braille_to_chinese(braille_text)
+    elif lang == "shuangpin":
+        translated = translate_braille_to_shuangpin(braille_text)
     elif lang == "raw":
         return braille_text  # Raw mode: return braille as-is
     else:
@@ -652,6 +1125,8 @@ def auto_detect_and_translate(braille_text: str):
         "english_g1": translate_braille_to_english_g1(braille_text),
         "english_g2": translate_braille_to_english_g2(braille_text),
         "russian":    translate_braille_to_russian(braille_text),
+        "chinese":    translate_braille_to_chinese(braille_text),
+        "shuangpin":  translate_braille_to_shuangpin(braille_text),
     }
 
     # 2. Build a single disambiguation prompt
@@ -669,7 +1144,8 @@ Task:
 Evaluate each candidate above. Identify if exactly ONE candidate is a cohesive, readable, and meaningful human text in its target language.
 
 Rules:
-1. If ONE candidate is clearly readable and makes perfect sense, return its key: "arabic", "french", "english_g1", "english_g2", or "russian".
+1. If ONE candidate is clearly readable and makes perfect sense, return its key: "arabic", "french", "english_g1", "english_g2", "russian", "chinese", or "shuangpin".
+   For "chinese" or "shuangpin": the candidate will be Hanyu Pinyin syllables (e.g. "ni hao", "zhong guo"). Select "chinese" or "shuangpin" if the Pinyin syllables form a plausible sequence of Mandarin sounds that, when spoken, would constitute coherent Chinese speech.
 2. If ALL candidates are mostly gibberish, random letter noise, scattered punctuation, disjointed words, or contain raw untranslated Braille Unicode symbols (such as ⠛, ⠪, ⠈, ⠬, ⠠, ⠼), you MUST return "none".
 3. Default to "none" if there is any doubt, if the text is noisy dot output, or if it consists of meaningless character sequences. Never choose a language key just because a candidate uses that language's alphabet/script; the words themselves MUST form actual, coherent, and readable human sentences.
 
@@ -716,6 +1192,11 @@ Return a single-line JSON object (no markdown, no code fences):
             if detected_lang == "none" or detected_lang not in candidates:
                 print("⚠️  Auto-detect: No valid language identified — raw fallback.")
                 return "raw", braille_text, ""
+
+            # For Chinese and Shuangpin: run a dedicated Pinyin→Hanzi Gemini pass
+            if detected_lang in ("chinese", "shuangpin") and not corrected:
+                raw_translation = candidates[detected_lang]
+                corrected = correct_text_with_gemini(raw_translation, language="chinese")
 
             raw_translation = candidates[detected_lang]
             print(f"🌐 Auto-detect: identified language = {detected_lang}")

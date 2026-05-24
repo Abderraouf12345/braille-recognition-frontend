@@ -1902,7 +1902,7 @@ class BrailleProcessor:
         lut = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)], dtype=np.uint8)
         recto_4 = cv2.LUT(recto_4, lut)
         recto_2 = recto_4
-        median_1 = median_top_1_percent(recto_2, per= 99)
+        median_1 = median_top_1_percent(recto_2, per= 99.9)
         recto_concentrated_before_treshold = filter_dots_by_mass(recto_2, ratio=1)
         recto_concentrated_before_treshold = filter_dots_by_mass_top_1(recto_concentrated_before_treshold, median_1, ratio = 0.2)
         recto_concentrated_before_treshold = restore_intensity(recto_concentrated_before_treshold, recto_2, expand = v1_norm)
@@ -1915,7 +1915,7 @@ class BrailleProcessor:
         search_max_h = int(v1_norm * 7) 
         search_max_w = int(Dot_Diameter)
         top_vectors = find_top_k_self_translations(
-            recto_2,
+            recto_concentrated,
             min_h=search_min_h,
             min_w=search_min_w,
             max_h=search_max_h,
@@ -1927,7 +1927,7 @@ class BrailleProcessor:
         search_max_h = int(v1_norm)
         search_max_w = int(v_near * 3)
         top_vectors = find_top_k_self_translations(
-            recto_2,
+            recto_concentrated,
             min_h=search_min_h,
             min_w=search_min_w,
             max_h=search_max_h,

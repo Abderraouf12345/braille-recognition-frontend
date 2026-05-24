@@ -91,7 +91,7 @@ async def process_image(
         from core.translator import correct_text_with_gemini
         gemini_key = os.environ.get("GEMINI_API_KEY", "")
         if gemini_key and language.lower() != "raw":
-            gemini_text = await loop.run_in_executor(executor, correct_text_with_gemini, arabic_text)
+            gemini_text = await loop.run_in_executor(executor, correct_text_with_gemini, arabic_text, language)
         else:
             gemini_text = "" if language.lower() == "raw" else "Gemini API key not configured."
         
@@ -183,7 +183,8 @@ async def process_image_stream(
                     gemini_text = await loop.run_in_executor(
                         executor,
                         correct_text_with_gemini,
-                        translated_text
+                        translated_text,
+                        language
                     )
                 else:
                     gemini_text = "Gemini API key not configured. Unable to perform correction."
@@ -224,7 +225,7 @@ async def get_voices():
             if base_lang not in data: data[base_lang] = []
             data[base_lang].append({"label": label, "value": v['ShortName']})
         
-        priority = ["Arabic", "French", "English", "Russian"]
+        priority = ["Arabic", "French", "English", "Russian", "Chinese"]
         sorted_langs = [p for p in priority if p in data.keys()] + sorted([k for k in data.keys() if k not in priority])
         voice_data = {k: sorted(data[k], key=lambda x: x["label"]) for k in sorted_langs}
         return {"success": True, "voices": voice_data, "languages": sorted_langs}
