@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, Volume2, Loader2 } from "lucide-react";
+import { Download, Volume2, Loader2, Play, Pause, FastForward, Rewind, X } from "lucide-react";
 import axios from "axios";
 
 interface ResultsPanelProps {
@@ -26,7 +26,20 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
   const [isTtsLoading, setIsTtsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
+  // Audio Player State
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     // Fetch voices
@@ -89,11 +102,13 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
       }
 
       setAudioUrl(url);
+      setShowPlayer(true);
 
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = url;
-        audioRef.current.play();
+        audioRef.current.play().catch(e => console.error("Auto-play failed:", e));
+        setIsPlaying(true);
       }
     } catch (err) {
       console.error("Failed to generate TTS:", err);
@@ -211,7 +226,83 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
           </button>
         </div>
 
-        <audio ref={audioRef} className="hidden" controls />
+        {/* Custom Audio Player */}
+        {showPlayer && (
+          <div className="mt-4 bg-gray-900 border border-gray-700 rounded-xl p-4 flex flex-col space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-emerald-400 flex items-center gap-2">
+                <Volume2 className="w-4 h-4" />
+                Audio Player
+              </span>
+              <button 
+                onClick={() => { 
+                  setShowPlayer(false); 
+                  if (audioRef.current) audioRef.current.pause(); 
+                }} 
+                className="text-gray-400 hover:text-white transition-colors bg-gray-800 hover:bg-gray-700 p-1 rounded-full"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <span className="text-xs text-gray-400 w-10 text-right font-mono">{formatTime(currentTime)}</span>
+              <input 
+                type="range" 
+                min={0} 
+                max={duration || 100} 
+                value={currentTime} 
+                onChange={(e) => {
+                  if (audioRef.current) {
+                    audioRef.current.currentTime = Number(e.target.value);
+                  }
+                }}
+                className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+              <span className="text-xs text-gray-400 w-10 font-mono">{formatTime(duration)}</span>
+            </div>
+
+            <div className="flex justify-center items-center space-x-6">
+              <button 
+                onClick={() => { if (audioRef.current) audioRef.current.currentTime -= 5; }}
+                className="text-gray-300 hover:text-emerald-400 transition-colors p-2 bg-gray-800 rounded-full hover:bg-gray-700 active:scale-95"
+                title="Rewind 5 seconds"
+              >
+                <Rewind className="w-5 h-5 fill-current" />
+              </button>
+              
+              <button 
+                onClick={() => {
+                  if (audioRef.current) {
+                    if (isPlaying) audioRef.current.pause();
+                    else audioRef.current.play();
+                  }
+                }}
+                className="text-white bg-emerald-600 hover:bg-emerald-500 transition-all p-3 rounded-full shadow-lg hover:scale-105 active:scale-95 flex items-center justify-center"
+              >
+                {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
+              </button>
+              
+              <button 
+                onClick={() => { if (audioRef.current) audioRef.current.currentTime += 5; }}
+                className="text-gray-300 hover:text-emerald-400 transition-colors p-2 bg-gray-800 rounded-full hover:bg-gray-700 active:scale-95"
+                title="Fast forward 5 seconds"
+              >
+                <FastForward className="w-5 h-5 fill-current" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <audio 
+          ref={audioRef} 
+          className="hidden" 
+          onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+          onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+          onEnded={() => setIsPlaying(false)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+        />
       </div>
     </div>
   );

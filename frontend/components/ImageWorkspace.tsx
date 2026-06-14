@@ -63,7 +63,7 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 shadow-2xl relative">
+    <div className="w-full h-full flex flex-col bg-gray-900 rounded-2xl overflow-visible border border-gray-800 shadow-2xl relative">
       {!imageUrl ? (
         <label className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-800/50 transition-colors">
           <Upload className="w-12 h-12 text-gray-500 mb-4" />
@@ -99,9 +99,9 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
       ) : (
         <div 
           ref={containerRef}
-          className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-black p-4"
+          className="relative flex-1 w-full h-full flex items-center justify-center overflow-visible bg-black"
         >
-          <div className="relative w-full h-full flex items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center overflow-visible">
             {/* The image acts as the coordinate space reference */}
             <img 
               src={imageUrl} 
