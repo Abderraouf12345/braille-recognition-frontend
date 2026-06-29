@@ -7,13 +7,11 @@ import axios from "axios";
 interface ResultsPanelProps {
   braille: string;
   arabic: string;
-  gemini: string;
   language?: string;
-  isGeminiLoading?: boolean;
 }
 
-export default function ResultsPanel({ braille, arabic, gemini, language = "arabic", isGeminiLoading = false }: ResultsPanelProps) {
-  const [activeTab, setActiveTab] = useState<"braille" | "arabic" | "gemini">("gemini");
+export default function ResultsPanel({ braille, arabic, language = "arabic" }: ResultsPanelProps) {
+  const [activeTab, setActiveTab] = useState<"braille" | "arabic">("arabic");
 
   // Format Braille text to ensure every line is left-justified while preserving vertical gaps
   const formattedBraille = braille ? braille.split('\n').map(line => line.replace(/^[\s\u2800]+/, '')).join('\n') : "";
@@ -81,8 +79,7 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
   const handlePlayAudio = async () => {
     let content = "";
     if (activeTab === "braille") content = formattedBraille;
-    else if (activeTab === "arabic") content = arabic;
-    else content = gemini;
+    else content = arabic;
 
     if (!content.trim() || !selectedVoice) return;
 
@@ -120,8 +117,7 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
   const handleDownload = () => {
     let content = "";
     if (activeTab === "braille") content = formattedBraille;
-    else if (activeTab === "arabic") content = arabic;
-    else content = gemini;
+    else content = arabic;
 
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -132,20 +128,12 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
     URL.revokeObjectURL(url);
   };
 
-  const currentContent = activeTab === "braille" ? formattedBraille : activeTab === "arabic" ? arabic : gemini;
+  const currentContent = activeTab === "braille" ? formattedBraille : arabic;
 
   return (
     <div className="flex-1 bg-gray-800 rounded-2xl flex flex-col border border-gray-700 shadow-xl overflow-hidden mt-6">
       {/* Tabs Header */}
       <div className="flex border-b border-gray-700">
-        <button
-          onClick={() => setActiveTab("gemini")}
-          className={`flex-1 py-4 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === "gemini" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
-            }`}
-        >
-          Corrected (Gemini)
-          {isGeminiLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />}
-        </button>
         <button
           onClick={() => setActiveTab("arabic")}
           className={`flex-1 py-4 text-sm font-medium transition-colors ${activeTab === "arabic" ? "text-blue-400 border-b-2 border-blue-400 bg-gray-800" : "text-gray-400 hover:text-gray-200 hover:bg-gray-700"
@@ -172,13 +160,6 @@ export default function ResultsPanel({ braille, arabic, gemini, language = "arab
           language === "raw"
             ? <span className="text-gray-500 italic">Translation disabled in Raw Mode. Switch to a language to enable translation.</span>
             : (arabic || "No translated text yet.")
-        )}
-        {activeTab === "gemini" && (
-          language === "raw"
-            ? <span className="text-gray-500 italic">Gemini correction disabled in Raw Mode. Switch to a language to enable correction.</span>
-            : isGeminiLoading
-              ? <div className="flex items-center gap-3 text-gray-400"><Loader2 className="w-5 h-5 animate-spin text-blue-400" /><span className="italic">Gemini is correcting the text...</span></div>
-              : (gemini || "No Gemini correction yet.")
         )}
       </div>
 

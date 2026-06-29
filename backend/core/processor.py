@@ -17,11 +17,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from numba import njit
-import google.generativeai as genai
 
-_GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-if _GEMINI_KEY:
-    genai.configure(api_key=_GEMINI_KEY)
 
 
 # ── Perspective warp ──────────────────────────────────────────────────────────
@@ -1682,10 +1678,8 @@ def render_overlay_for_language(language: str) -> str:
     different language. Returns a base64 data-URI string (same format as the
     original overlay), or an empty string if no cached inference exists.
 
-    This is used by the auto-detect pipeline: the heavy ML processing runs once
-    with language='raw' to get Braille Unicode annotations quickly, then after
-    Gemini identifies the language, this function redraws the overlay with the
-    correct translated characters — without repeating the ML inference.
+    This is used to redraw the overlay with the correct translated characters
+    without repeating the ML inference.
     """
     warped_rgb   = _last_inference_cache.get("warped_rgb")
     decoded_items = _last_inference_cache.get("decoded_items")
@@ -1780,7 +1774,7 @@ class BrailleProcessor:
         pts_src_in : 4x2 float32 corner points (full-resolution)
         V_input    : [vx, vy] light direction
         language   : arabic | french | english_g1 | english_g2 | russian
-        Returns (braille_text, translated_text, gemini_corrected)
+        Returns (braille_text, translated_text)
         """
         from .translator import translate_results
         V          = np.array(V_input, dtype=np.float32)
@@ -2093,7 +2087,7 @@ class BrailleProcessor:
             language=language
         )
 
-        # ── Translate (dictionary only — Gemini is handled by the stream endpoint) ──
+        # ── Translate ───────────────────────────────────────────────────────────────
         from .translator import translate_only
         translated = translate_only(braille_text, language=language)
         return braille_text, translated, overlay_image

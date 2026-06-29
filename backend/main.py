@@ -80,26 +80,17 @@ async def process_image(
             language
         )
         
-        # Unpack the two-part result (Gemini now handled separately)
+        # Unpack the two-part result
         if isinstance(result, tuple) and len(result) >= 2:
             braille_text, arabic_text = result[0], result[1]
         else:
             braille_text = str(result)
             arabic_text = ""
-
-        # Run Gemini correction synchronously for the legacy endpoint
-        from core.translator import correct_text_with_gemini
-        gemini_key = os.environ.get("GEMINI_API_KEY", "")
-        if gemini_key and language.lower() != "raw":
-            gemini_text = await loop.run_in_executor(executor, correct_text_with_gemini, arabic_text, language)
-        else:
-            gemini_text = "" if language.lower() == "raw" else "Gemini API key not configured."
         
         return {
             "success": True,
             "braille": braille_text,
-            "arabic": arabic_text,
-            "gemini": gemini_text
+            "arabic": arabic_text
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -114,7 +105,7 @@ async def process_image_stream(
 ):
     """
     Streaming endpoint using Server-Sent Events (SSE).
-    Yields results progressively: braille → translation → gemini correction.
+    Yields results progressively: braille → translation.
     """
     contents = await file.read()
 
@@ -130,65 +121,20 @@ async def process_image_stream(
             angle_rad = np.radians(lightAngle)
             V = np.array([np.sin(angle_rad), -np.cos(angle_rad)])
 
-            # --- Stage 1: Run heavy image processing ---
-            # Pass "raw" to the processor when auto-detecting so it returns
-            # only the Braille Unicode — translation will happen in Stage 2.
-            processor_language = "raw" if language.lower() == "auto" else language
+            # --- Run heavy image processing ---
             loop = asyncio.get_running_loop()
             braille_text, translated_text, overlay_image = await loop.run_in_executor(
                 executor,
                 processor.process,
-                img, pts_src, V, processor_language
+                img, pts_src, V, language
             )
 
             # Yield overlay and braille immediately
             yield f"data: {json.dumps({'type': 'overlay', 'value': overlay_image})}\n\n"
             yield f"data: {json.dumps({'type': 'braille', 'value': braille_text})}\n\n"
 
-            # --- Stage 2: Translate / Auto-detect ---
-            if language.lower() == "auto":
-                from core.translator import auto_detect_and_translate
-                from core.processor import render_overlay_for_language
-                detected_lang, raw_translation, gemini_text = await loop.run_in_executor(
-                    executor,
-                    auto_detect_and_translate,
-                    braille_text
-                )
-                # Tell the frontend which language was identified
-                yield f"data: {json.dumps({'type': 'detected_language', 'value': detected_lang})}\n\n"
-                yield f"data: {json.dumps({'type': 'translation', 'value': raw_translation})}\n\n"
-                yield f"data: {json.dumps({'type': 'gemini', 'value': gemini_text})}\n\n"
-
-                # Re-render the overlay with the detected language's characters
-                # (if "raw", overlay stays as Braille Unicode — still correct)
-                if detected_lang != "raw":
-                    updated_overlay = await loop.run_in_executor(
-                        executor,
-                        render_overlay_for_language,
-                        detected_lang
-                    )
-                    if updated_overlay:
-                        yield f"data: {json.dumps({'type': 'overlay', 'value': updated_overlay})}\n\n"
-
-            elif language.lower() == "raw":
-                yield f"data: {json.dumps({'type': 'translation', 'value': translated_text})}\n\n"
-                yield f"data: {json.dumps({'type': 'gemini', 'value': ''})}\n\n"
-
-            else:
-                yield f"data: {json.dumps({'type': 'translation', 'value': translated_text})}\n\n"
-                from core.translator import correct_text_with_gemini
-                import os as _os
-                key = _os.environ.get("GEMINI_API_KEY", "")
-                if key:
-                    gemini_text = await loop.run_in_executor(
-                        executor,
-                        correct_text_with_gemini,
-                        translated_text,
-                        language
-                    )
-                else:
-                    gemini_text = "Gemini API key not configured. Unable to perform correction."
-                yield f"data: {json.dumps({'type': 'gemini', 'value': gemini_text})}\n\n"
+            # Yield translation
+            yield f"data: {json.dumps({'type': 'translation', 'value': translated_text})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

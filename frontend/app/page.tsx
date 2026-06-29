@@ -11,27 +11,20 @@ export default function Dashboard() {
   const [corners, setCorners] = useState<{x: number, y: number}[]>([]);
   const [lightAngle, setLightAngle] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isGeminiLoading, setIsGeminiLoading] = useState(false);
-  const [isAutoDetecting, setIsAutoDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState("arabic");
 
   const [results, setResults] = useState({
     braille: "",
-    arabic: "",
-    gemini: ""
+    arabic: ""
   });
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
 
   const handleProcess = async () => {
     if (!imageFile || corners.length !== 4) return;
     setIsProcessing(true);
-    // isGeminiLoading is intentionally NOT set here — it activates only
-    // after braille + translation are already rendered (see translation event below)
-    setIsGeminiLoading(false);
-    setIsAutoDetecting(language === "auto");
     setError(null);
-    setResults({ braille: "", arabic: "", gemini: "" });
+    setResults({ braille: "", arabic: "" });
     setOverlayImage(null);
 
     const formData = new FormData();
@@ -73,25 +66,13 @@ export default function Dashboard() {
             } else if (event.type === "braille") {
               setResults(prev => ({ ...prev, braille: event.value }));
               setIsProcessing(false); // UI unlocked as soon as braille arrives
-            } else if (event.type === "detected_language") {
-              // Auto-detect: snap the language selector to the identified language
-              setLanguage(event.value); // "raw" if no match found
-              setIsAutoDetecting(false);
             } else if (event.type === "translation") {
               setResults(prev => ({ ...prev, arabic: event.value }));
-              // Both braille and translation are now on screen — activate Gemini spinner
-              setIsGeminiLoading(true);
-            } else if (event.type === "gemini") {
-              setResults(prev => ({ ...prev, gemini: event.value }));
-              setIsGeminiLoading(false);
             } else if (event.type === "done") {
-              setIsGeminiLoading(false);
-              setIsAutoDetecting(false);
+              setIsProcessing(false);
             } else if (event.type === "error") {
               setError(event.value);
               setIsProcessing(false);
-              setIsGeminiLoading(false);
-              setIsAutoDetecting(false);
             }
           } catch {
             // ignore malformed SSE lines
@@ -101,8 +82,6 @@ export default function Dashboard() {
     } catch (err: any) {
       setError(err.message || "Failed to connect to the processing server.");
       setIsProcessing(false);
-      setIsGeminiLoading(false);
-      setIsAutoDetecting(false);
     }
   };
 
@@ -112,7 +91,7 @@ export default function Dashboard() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           Braille Translator Pro
         </h1>
-        <p className="text-gray-500 mt-2">Advanced structural analysis & generative correction</p>
+        <p className="text-gray-500 mt-2">Advanced structural analysis & multi-language translation</p>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
@@ -142,10 +121,9 @@ export default function Dashboard() {
             <h3 className="text-gray-400 text-sm font-medium mb-3">Translation Language</h3>
             <select
               value={language}
-              onChange={(e) => { setLanguage(e.target.value); setIsAutoDetecting(false); }}
+              onChange={(e) => setLanguage(e.target.value)}
               className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 outline-none"
             >
-              <option value="auto">✨ Auto-Detect Language</option>
               <option value="arabic">Arabic — عربي</option>
               <option value="french">French — Français</option>
               <option value="english_g1">English G1 — Grade 1 (literal)</option>
@@ -155,28 +133,18 @@ export default function Dashboard() {
               <option value="shuangpin">Shuangpin — 汉语双拼盲文</option>
               <option value="raw">Braille Unicode Only (No Dictionary)</option>
             </select>
-            {isAutoDetecting && (
-              <p className="text-blue-400 text-xs mt-2 flex items-center gap-1.5 animate-pulse">
-                <span>🔍</span> Detecting language via Gemini…
-              </p>
-            )}
           </div>
           
           <div className="mt-6">
             <button 
               onClick={handleProcess}
-              disabled={!imageFile || isProcessing || isGeminiLoading || corners.length !== 4}
+              disabled={!imageFile || isProcessing || corners.length !== 4}
               className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-lg flex items-center justify-center space-x-3"
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="w-6 h-6 animate-spin" />
                   <span>Extracting & Translating...</span>
-                </>
-              ) : isGeminiLoading ? (
-                <>
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  <span>Awaiting Gemini...</span>
                 </>
               ) : (
                 <span>Extract & Translate</span>
@@ -191,10 +159,8 @@ export default function Dashboard() {
 
           <ResultsPanel 
             braille={results.braille} 
-            arabic={results.arabic} 
-            gemini={results.gemini}
+            arabic={results.arabic}
             language={language}
-            isGeminiLoading={isGeminiLoading}
           />
 
         </div>
