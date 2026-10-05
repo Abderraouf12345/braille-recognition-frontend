@@ -28,15 +28,20 @@ class DotPredictor(nn.Module):
         x = x.view(x.size(0), -1)
         return self.fc_layers(x)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Force CPU: on ZeroGPU, CUDA is only available inside @spaces.GPU functions.
+# Using cuda here (outside such a function) causes a RuntimeError.
+device = torch.device("cpu")
 model_3ch = DotPredictor().to(device)
-model_path = os.path.join(os.path.dirname(__file__), "..", "..", "best_braille_model_3_channel_augmented.pth")
+model_path = os.path.join(os.path.dirname(__file__), "..", "best_braille_model_3_channel_augmented.pth")
 
 def load_model():
+    print(f">>> [model] Looking for model at: {model_path}", flush=True)
     if os.path.exists(model_path):
-        model_3ch.load_state_dict(torch.load(model_path, map_location=device))
+        print(f">>> [model] Model file found! Loading...", flush=True)
+        # weights_only=False required for PyTorch 2.x compatibility with older checkpoints
+        model_3ch.load_state_dict(torch.load(model_path, map_location=device, weights_only=False))
         model_3ch.eval()
-        print(f"✅ Model loaded successfully.")
+        print(f">>> [model] Model loaded successfully on {device}.", flush=True)
     else:
-        print(f"❌ Model file not found at {model_path}.")
+        print(f">>> [model] WARNING: Model file not found at {model_path}.", flush=True)
     return model_3ch, device

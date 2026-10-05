@@ -1359,7 +1359,9 @@ def warmup_numba():
     _ints   = np.array([100.0, 150.0, 200.0], dtype=np.float32)
     _ = get_vertical_distances_2(_coords, _ints, 3)
     
-warmup_numba()
+# warmup_numba() is NOT called here to avoid blocking server startup.
+# Numba JIT functions will compile lazily on first use.
+
 
 
 # ── Model reference ───────────────────────────────────────────────────────────
@@ -1766,7 +1768,10 @@ NUMBER_INDICATOR  = '⠼'
 # ── BrailleProcessor ─────────────────────────────────────────────────────────
 class BrailleProcessor:
     def __init__(self):
-        warmup_numba()
+        # Run numba warmup in background thread to avoid blocking server startup
+        import threading
+        threading.Thread(target=warmup_numba, daemon=True).start()
+
 
     def process(self, orig_img, pts_src_in, V_input, language="arabic"):
         """

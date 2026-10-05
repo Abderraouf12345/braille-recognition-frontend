@@ -1,6 +1,7 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi
 uvicorn
-opencv-python
+opencv-python-headless
 numba
 torch
 torchvision
@@ -8,3 +9,8 @@ python-multipart
 numpy
 scipy
 edge-tts
+spaces
+python-dotenv
+Pillow
+anyio
+httpx
