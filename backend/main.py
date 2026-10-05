@@ -32,7 +32,11 @@ app = FastAPI(title="Braille Processing API")
 # Configure CORS for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this in production
+    allow_origins=[
+        "https://braille-recognition-frontend-seven.vercel.app",
+        "https://braille-recognition-frontend-3r5e1inc7-abderraouf.vercel.app",
+        "http://localhost:3000",  # local dev
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
