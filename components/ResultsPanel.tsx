@@ -43,7 +43,9 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
     // Fetch voices
     const fetchVoices = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const API_URL = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("hf.space")
+          ? process.env.NEXT_PUBLIC_API_URL
+          : "/api";
         const response = await axios.get(`${API_URL}/voices`);
         if (response.data.success) {
           setVoicesByLang(response.data.voices);
@@ -86,7 +88,9 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
 
     setIsTtsLoading(true);
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const API_URL = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("hf.space")
+        ? process.env.NEXT_PUBLIC_API_URL
+        : "/api";
       const response = await axios.post(`${API_URL}/tts`, {
         text: content,
         voice: selectedVoice

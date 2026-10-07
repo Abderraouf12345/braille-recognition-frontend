@@ -34,7 +34,9 @@ export default function Dashboard() {
     formData.append("language", language);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const API_URL = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("hf.space")
+        ? process.env.NEXT_PUBLIC_API_URL
+        : "/api";
       const response = await fetch(`${API_URL}/process-stream`, {
         method: "POST",
         body: formData,
