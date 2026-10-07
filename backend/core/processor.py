@@ -1472,7 +1472,7 @@ def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, 
     from .translator import translate_only
 
     # Configure font support
-    matplotlib.rcParams['font.sans-serif'] = ['Arial', 'Segoe UI', 'DejaVu Sans', 'Segoe UI Symbol', 'sans-serif']
+    matplotlib.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Segoe UI', 'Segoe UI Symbol', 'sans-serif']
     matplotlib.rcParams['font.family'] = 'sans-serif'
 
     h_img, w_img = warped_rgb.shape[:2]
@@ -1493,11 +1493,8 @@ def get_braille_text_content_ultra_fast(img1, img2, img3, boxes, model, device, 
             if not display_char.strip():
                 display_char = it['char']
                 
-        # Select font based on character set to prevent tofu rendering
-        if 0x2800 <= ord(display_char[0]) <= 0x28FF:
-            font_name = 'DejaVu Sans'
-        else:
-            font_name = 'Arial'
+        # Use DejaVu Sans which is available natively on Linux and supports both Latin and Braille Unicode
+        font_name = 'DejaVu Sans'
 
         # Position the label directly above the bounding box
         ax.text(it['x'] + it['w'] / 2, it['y'] - 3, display_char,
@@ -1699,7 +1696,7 @@ def render_overlay_for_language(language: str) -> str:
     from .translator import translate_only
 
     matplotlib.rcParams['font.sans-serif'] = [
-        'Arial', 'Segoe UI', 'DejaVu Sans', 'Segoe UI Symbol', 'sans-serif'
+        'DejaVu Sans', 'Arial', 'Segoe UI', 'Segoe UI Symbol', 'sans-serif'
     ]
     matplotlib.rcParams['font.family'] = 'sans-serif'
 
@@ -1728,10 +1725,8 @@ def render_overlay_for_language(language: str) -> str:
             if not display_char.strip():
                 display_char = it['char']
 
-        if 0x2800 <= ord(display_char[0]) <= 0x28FF:
-            font_name = 'DejaVu Sans'
-        else:
-            font_name = 'Arial'
+        # Use DejaVu Sans which is available natively on Linux and supports both Latin and Braille Unicode
+        font_name = 'DejaVu Sans'
 
         ax.text(
             it['x'] + it['w'] / 2, it['y'] - 3, display_char,

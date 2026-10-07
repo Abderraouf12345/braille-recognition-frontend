@@ -13,6 +13,11 @@ from dotenv import load_dotenv
 import os
 import re
 import tempfile
+import logging
+
+# Silence matplotlib font fallback warnings in console logs
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 print(">>> [main] importing edge_tts...", flush=True)
 import edge_tts
 print(">>> [main] edge_tts OK", flush=True)
