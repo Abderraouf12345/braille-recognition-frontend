@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Upload } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
+import { optimizeImageForUpload } from "../utils/imageCompressor";
 
 interface Point {
   x: number;
@@ -21,6 +22,7 @@ interface ImageWorkspaceProps {
 
 export default function ImageWorkspace({ imageFile, setImageFile, corners, setCorners, overlayImage, onClearOverlay, isLocked }: ImageWorkspaceProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
 
@@ -64,7 +66,13 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
 
   return (
     <div className="w-full h-full flex flex-col bg-gray-900 rounded-2xl overflow-visible border border-gray-800 shadow-2xl relative">
-      {!imageUrl ? (
+      {isOptimizing ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <Loader2 className="w-12 h-12 text-blue-400 animate-spin mb-4" />
+          <span className="text-gray-200 font-medium text-lg">Optimizing image...</span>
+          <span className="text-gray-500 text-sm mt-1">Scaling safely under upload limits</span>
+        </div>
+      ) : !imageUrl ? (
         <label className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-800/50 transition-colors">
           <Upload className="w-12 h-12 text-gray-500 mb-4" />
           <span className="text-gray-300 font-medium">Click to upload Braille Image</span>
@@ -73,8 +81,19 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
             type="file" 
             className="hidden" 
             accept="image/*"
-            onChange={(e) => {
-              if (e.target.files?.[0]) setImageFile(e.target.files[0]);
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setIsOptimizing(true);
+                try {
+                  const optimized = await optimizeImageForUpload(file);
+                  setImageFile(optimized);
+                } catch {
+                  setImageFile(file);
+                } finally {
+                  setIsOptimizing(false);
+                }
+              }
             }}
           />
         </label>
