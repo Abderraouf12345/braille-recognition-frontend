@@ -5,6 +5,7 @@ import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
 import { Loader2 } from "lucide-react";
+import { optimizeImageForUpload } from "@/utils/imageCompressor";
 
 export default function Dashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -27,8 +28,17 @@ export default function Dashboard() {
     setResults({ braille: "", arabic: "" });
     setOverlayImage(null);
 
+    let uploadFile = imageFile;
+    if (imageFile.size > 3.5 * 1024 * 1024) {
+      try {
+        uploadFile = await optimizeImageForUpload(imageFile);
+      } catch {
+        uploadFile = imageFile;
+      }
+    }
+
     const formData = new FormData();
-    formData.append("file", imageFile);
+    formData.append("file", uploadFile);
     formData.append("corners", JSON.stringify(corners));
     formData.append("lightAngle", lightAngle.toString());
     formData.append("language", language);
