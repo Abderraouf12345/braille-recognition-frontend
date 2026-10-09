@@ -3,7 +3,7 @@ import io
 import json
 import numpy as np
 import cv2
-from fastapi import FastAPI, APIRouter, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from pydantic import BaseModel
@@ -146,10 +146,25 @@ async def process_image(
     language: str = Form("arabic")
 ):
     try:
+        # --- Strict file-type validation ---
+        content_type = (file.content_type or "").lower()
+        if not content_type.startswith("image/"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type '{content_type}'. Only image files are accepted (JPEG, PNG, WebP, TIFF, BMP)."
+            )
+
         # Read the uploaded image into memory
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        # Secondary guard: cv2.imdecode returns None if the bytes aren't a valid image
+        if img is None:
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded file could not be decoded as an image. Please upload a valid JPG, PNG, WebP, TIFF, or BMP file."
+            )
         
         # Parse corners (list of dicts [{x: ..., y: ...}, ...])
         pts_data = json.loads(corners)
@@ -202,7 +217,22 @@ async def process_image_stream(
     Streaming endpoint using Server-Sent Events (SSE).
     Yields results progressively: braille → translation.
     """
+    # --- Strict file-type validation (runs before streaming begins) ---
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type '{content_type}'. Only image files are accepted (JPEG, PNG, WebP, TIFF, BMP)."
+        )
+
     contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    img_check = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img_check is None:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded file could not be decoded as an image. Please upload a valid JPG, PNG, WebP, TIFF, or BMP file."
+        )
 
     async def event_stream():
         try:
