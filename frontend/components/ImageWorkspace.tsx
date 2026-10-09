@@ -76,23 +76,34 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
         <label className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-800/50 transition-colors">
           <Upload className="w-12 h-12 text-gray-500 mb-4" />
           <span className="text-gray-300 font-medium">Click to upload Braille Image</span>
-          <span className="text-gray-600 text-sm mt-2">JPG, PNG, TIFF</span>
+          <span className="text-gray-600 text-sm mt-2">JPG, PNG, WebP, TIFF, BMP</span>
           <input 
             type="file" 
             className="hidden" 
-            accept="image/*"
+            accept="image/jpeg,image/jpg,image/png,image/webp,image/tiff,image/bmp"
             onChange={async (e) => {
               const file = e.target.files?.[0];
-              if (file) {
-                setIsOptimizing(true);
-                try {
-                  const optimized = await optimizeImageForUpload(file);
-                  setImageFile(optimized);
-                } catch {
-                  setImageFile(file);
-                } finally {
-                  setIsOptimizing(false);
-                }
+              // Reset input so the same file can be re-selected after rejection
+              e.target.value = "";
+              if (!file) return;
+
+              // Strict MIME-type guard — reject anything that is not an image
+              if (!file.type.startsWith("image/")) {
+                alert(
+                  `❌ Invalid file type: "${file.type || "unknown"}"\n\n` +
+                  "Only image files are accepted (JPG, PNG, WebP, TIFF, BMP)."
+                );
+                return;
+              }
+
+              setIsOptimizing(true);
+              try {
+                const optimized = await optimizeImageForUpload(file);
+                setImageFile(optimized);
+              } catch {
+                setImageFile(file);
+              } finally {
+                setIsOptimizing(false);
               }
             }}
           />
