@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Info, X, Mail } from "lucide-react";
+import { Info, X, Mail, Loader2, RotateCcw } from "lucide-react";
 import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
-import { Loader2 } from "lucide-react";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
 
 export default function Dashboard() {
@@ -22,6 +21,15 @@ export default function Dashboard() {
   });
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
+
+  const handleReset = () => {
+    setImageFile(null);
+    setCorners([]);
+    setLightAngle(0);
+    setResults({ braille: "", arabic: "" });
+    setOverlayImage(null);
+    setError(null);
+  };
 
   const handleProcess = async () => {
     if (!imageFile || corners.length !== 4) return;
@@ -109,13 +117,25 @@ export default function Dashboard() {
           </h1>
           <p className="text-gray-500 mt-2">AI-powered Braille recognition &amp; multi-language translation</p>
         </div>
-        <button
-          onClick={() => setShowAbout(true)}
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0 mt-1"
-        >
-          <Info className="w-4 h-4" />
-          About
-        </button>
+        <div className="flex items-center gap-2">
+          {imageFile && (
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-red-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0 mt-1"
+              title="Clear image and start over"
+            >
+              <RotateCcw className="w-4 h-4" />
+              New Image
+            </button>
+          )}
+          <button
+            onClick={() => setShowAbout(true)}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0 mt-1"
+          >
+            <Info className="w-4 h-4" />
+            About
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
