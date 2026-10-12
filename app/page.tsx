@@ -105,7 +105,7 @@ export default function Dashboard() {
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-            Braille Translator Pro
+            Braille Recognition
           </h1>
           <p className="text-gray-500 mt-2">Advanced structural analysis &amp; multi-language translation</p>
         </div>
@@ -217,7 +217,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <span className="text-2xl">⠿</span>
                 <div>
-                  <h2 className="text-lg font-bold text-white">About Braille Translator Pro</h2>
+                  <h2 className="text-lg font-bold text-white">About Braille Recognition</h2>
                   <p className="text-xs text-gray-500 mt-0.5">AI-powered Braille recognition &amp; translation</p>
                 </div>
               </div>
