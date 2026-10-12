@@ -107,7 +107,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             Braille Recognition
           </h1>
-          <p className="text-gray-500 mt-2">Advanced structural analysis &amp; multi-language translation</p>
+          <p className="text-gray-500 mt-2">AI-powered Braille recognition &amp; multi-language translation</p>
         </div>
         <button
           onClick={() => setShowAbout(true)}
@@ -193,13 +193,23 @@ export default function Dashboard() {
       {/* ── Footer ── */}
       <footer className="mt-8 pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
         <span>© {new Date().getFullYear()} Braille Recognition — All rights reserved.</span>
-        <a
-          href="mailto:abderraouf.benmohieddine@g.enp.edu.dz"
-          className="flex items-center gap-1.5 text-gray-500 hover:text-blue-400 transition-colors"
-        >
-          <Mail className="w-3.5 h-3.5" />
-          abderraouf.benmohieddine@g.enp.edu.dz
-        </a>
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <a
+            href="mailto:abderraouf.benmohieddine@g.enp.edu.dz"
+            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-400 transition-colors"
+          >
+            <Mail className="w-3.5 h-3.5" />
+            abderraouf.benmohieddine@g.enp.edu.dz
+          </a>
+          <span className="text-gray-700 hidden sm:inline">·</span>
+          <a
+            href="mailto:abderraouf.amellal@g.enp.edu.dz"
+            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-400 transition-colors"
+          >
+            <Mail className="w-3.5 h-3.5" />
+            abderraouf.amellal@g.enp.edu.dz
+          </a>
+        </div>
       </footer>
 
       {/* ── About / How-It-Works Modal ── */}
@@ -285,6 +295,13 @@ export default function Dashboard() {
               >
                 <Mail className="w-4 h-4" />
                 abderraouf.benmohieddine@g.enp.edu.dz
+              </a>
+              <a
+                href="mailto:abderraouf.amellal@g.enp.edu.dz"
+                className="flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors text-sm mt-2"
+              >
+                <Mail className="w-4 h-4" />
+                abderraouf.amellal@g.enp.edu.dz
               </a>
             </div>
           </div>
