@@ -23,12 +23,7 @@ export default function Dashboard() {
   const [showAbout, setShowAbout] = useState(false);
 
   const handleReset = () => {
-    setImageFile(null);
-    setCorners([]);
-    setLightAngle(0);
-    setResults({ braille: "", arabic: "" });
-    setOverlayImage(null);
-    setError(null);
+    window.location.reload();
   };
 
   const handleProcess = async () => {
