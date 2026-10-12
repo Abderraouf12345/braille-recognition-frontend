@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Info, X, Mail } from "lucide-react";
 import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
@@ -20,6 +21,7 @@ export default function Dashboard() {
     arabic: ""
   });
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
+  const [showAbout, setShowAbout] = useState(false);
 
   const handleProcess = async () => {
     if (!imageFile || corners.length !== 4) return;
@@ -100,11 +102,20 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-6 flex flex-col font-sans selection:bg-blue-500/30">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-          Braille Translator Pro
-        </h1>
-        <p className="text-gray-500 mt-2">Advanced structural analysis & multi-language translation</p>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            Braille Translator Pro
+          </h1>
+          <p className="text-gray-500 mt-2">Advanced structural analysis &amp; multi-language translation</p>
+        </div>
+        <button
+          onClick={() => setShowAbout(true)}
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0 mt-1"
+        >
+          <Info className="w-4 h-4" />
+          About
+        </button>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
@@ -178,6 +189,107 @@ export default function Dashboard() {
 
         </div>
       </div>
+
+      {/* ── Footer ── */}
+      <footer className="mt-8 pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+        <span>© {new Date().getFullYear()} Braille Recognition — All rights reserved.</span>
+        <a
+          href="mailto:abderraouf.benmohieddine@g.enp.edu.dz"
+          className="flex items-center gap-1.5 text-gray-500 hover:text-blue-400 transition-colors"
+        >
+          <Mail className="w-3.5 h-3.5" />
+          abderraouf.benmohieddine@g.enp.edu.dz
+        </a>
+      </footer>
+
+      {/* ── About / How-It-Works Modal ── */}
+      {showAbout && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowAbout(false)}
+        >
+          <div
+            className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-800">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⠿</span>
+                <div>
+                  <h2 className="text-lg font-bold text-white">About Braille Translator Pro</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">AI-powered Braille recognition &amp; translation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAbout(false)}
+                className="text-gray-500 hover:text-white transition-colors bg-gray-800 hover:bg-gray-700 p-1.5 rounded-full"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* What it does */}
+            <div className="p-6 border-b border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">What is this?</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                This application uses deep learning to automatically recognize Braille characters from a photo
+                and translate them into multiple languages in real time. Simply upload a photo of any
+                Braille document, define the page corners, set the lighting direction, and get an
+                instant translation.
+              </p>
+            </div>
+
+            {/* How to use */}
+            <div className="p-6 border-b border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">How to use</h3>
+              <ol className="flex flex-col gap-4">
+                {[
+                  { step: "1", icon: "📷", title: "Upload a Braille image", desc: "Click the upload area and select a clear photo of a Braille page (JPG, PNG, WebP, TIFF or BMP)." },
+                  { step: "2", icon: "📐", title: "Adjust the corner markers", desc: "Drag the four blue corner handles to align with the edges of the Braille page for accurate perspective correction." },
+                  { step: "3", icon: "💡", title: "Set the light angle", desc: "Rotate the light dial to match the direction the light was coming from when the photo was taken. This improves dot detection." },
+                  { step: "4", icon: "🌐", title: "Choose a language &amp; translate", desc: "Select your target language and click Extract &amp; Translate. Results appear in real time." },
+                  { step: "5", icon: "🔊", title: "Listen, copy or download", desc: "Use the audio player to hear the translation read aloud, copy it to your clipboard, or download it as a text file." },
+                ].map(({ step, icon, title, desc }) => (
+                  <li key={step} className="flex gap-4">
+                    <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                      {step}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-200">{icon} {title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 leading-relaxed" dangerouslySetInnerHTML={{ __html: desc }} />
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* Supported Languages */}
+            <div className="p-6 border-b border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Supported languages</h3>
+              <div className="flex flex-wrap gap-2">
+                {["Arabic", "French", "English G1", "English G2", "Russian", "Chinese", "Shuangpin"].map((lang) => (
+                  <span key={lang} className="text-xs bg-gray-800 border border-gray-700 text-gray-300 px-2.5 py-1 rounded-full">
+                    {lang}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Contact */}
+            <div className="p-6">
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Contact</h3>
+              <a
+                href="mailto:abderraouf.benmohieddine@g.enp.edu.dz"
+                className="flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors text-sm"
+              >
+                <Mail className="w-4 h-4" />
+                abderraouf.benmohieddine@g.enp.edu.dz
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
