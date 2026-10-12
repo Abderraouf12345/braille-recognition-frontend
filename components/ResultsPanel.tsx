@@ -79,6 +79,20 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
     }
   }, [selectedLang, voicesByLang]);
 
+  useEffect(() => {
+    if (!braille && !arabic) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setShowPlayer(false);
+      setIsPlaying(false);
+      if (audioUrl) {
+        window.URL.revokeObjectURL(audioUrl);
+        setAudioUrl(null);
+      }
+    }
+  }, [braille, arabic]);
+
   const handlePlayAudio = async () => {
     let content = "";
     if (activeTab === "braille") content = formattedBraille;

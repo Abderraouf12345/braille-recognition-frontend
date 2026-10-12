@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Info, X, Mail, Loader2, RotateCcw } from "lucide-react";
 import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
@@ -21,9 +21,20 @@ export default function Dashboard() {
   });
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleReset = () => {
-    window.location.reload();
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    setImageFile(null);
+    setCorners([]);
+    setLightAngle(0);
+    setResults({ braille: "", arabic: "" });
+    setOverlayImage(null);
+    setError(null);
   };
 
   const handleProcess = async () => {
@@ -48,6 +59,9 @@ export default function Dashboard() {
     formData.append("lightAngle", lightAngle.toString());
     formData.append("language", language);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("hf.space")
         ? process.env.NEXT_PUBLIC_API_URL
@@ -55,6 +69,7 @@ export default function Dashboard() {
       const response = await fetch(`${API_URL}/process-stream`, {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -98,6 +113,7 @@ export default function Dashboard() {
         }
       }
     } catch (err: any) {
+      if (err.name === "AbortError") return;
       setError(err.message || "Failed to connect to the processing server.");
       setIsProcessing(false);
     }

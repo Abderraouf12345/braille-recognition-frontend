@@ -31,6 +31,9 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
       const url = URL.createObjectURL(imageFile);
       setImageUrl(url);
       return () => URL.revokeObjectURL(url);
+    } else {
+      setImageUrl(null);
+      setImgSize({ width: 0, height: 0 });
     }
   }, [imageFile]);
 
