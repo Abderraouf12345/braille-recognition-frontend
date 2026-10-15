@@ -70,12 +70,12 @@ export default function LightDial({ angle, setAngle }: LightDialProps) {
   }, [isDragging]);
 
   return (
-    <div className="bg-gray-800 p-6 rounded-2xl flex flex-col items-center justify-center border border-gray-700 shadow-xl">
-      <h3 className="text-gray-300 font-medium mb-6">Light Direction</h3>
+    <div className="bg-gray-800 p-3 sm:p-4 lg:p-[1.8vh] rounded-2xl flex flex-col items-center justify-center border border-gray-700 shadow-xl shrink-0">
+      <h3 className="text-gray-300 font-medium text-xs sm:text-sm mb-2 sm:mb-3 lg:mb-[1.5vh]">Light Direction</h3>
       
       <div 
         ref={dialRef}
-        className="relative w-32 h-32 rounded-full border-4 border-gray-700 bg-gray-900 cursor-pointer shadow-inner touch-none"
+        className="relative w-24 h-24 sm:w-28 sm:h-28 lg:w-[13vh] lg:h-[13vh] max-w-[128px] max-h-[128px] min-w-[80px] min-h-[80px] rounded-full border-4 border-gray-700 bg-gray-900 cursor-pointer shadow-inner touch-none"
         onMouseDown={handlePointerDown}
         onTouchStart={handlePointerDown}
       >
@@ -90,13 +90,13 @@ export default function LightDial({ angle, setAngle }: LightDialProps) {
           className="absolute top-1/2 left-1/2 w-full h-full pointer-events-none"
           style={{ transform: `translate(-50%, -50%) rotate(${angle - 90}deg)` }}
         >
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 bg-blue-500 p-2 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.6)]">
-            <Sun className="w-5 h-5 text-white" />
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 bg-blue-500 p-1.5 sm:p-2 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.6)]">
+            <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4 lg:h-4 text-white" />
           </div>
         </div>
       </div>
       
-      <div className="mt-6 text-2xl font-bold text-blue-400 font-mono">
+      <div className="mt-2 sm:mt-3 lg:mt-[1.2vh] text-lg sm:text-xl lg:text-2xl font-bold text-blue-400 font-mono">
         {angle}°
       </div>
     </div>

@@ -177,18 +177,18 @@ export default function Dashboard() {
         </div>
 
         {/* Right Side: Controls & Results */}
-        <div className={`w-full lg:w-[420px] xl:w-[460px] flex flex-col shrink-0 pr-1 lg:pr-2 custom-scrollbar ${
+        <div className={`w-full lg:w-[420px] xl:w-[460px] flex flex-col gap-2.5 sm:gap-3 lg:gap-[1.5vh] shrink-0 pr-1 lg:pr-2 custom-scrollbar ${
           isCornerSelectionMode ? "lg:h-full lg:overflow-y-auto" : ""
         }`}>
           
           <LightDial angle={lightAngle} setAngle={setLightAngle} />
           
-          <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700 shadow-xl mt-5">
-            <h3 className="text-gray-400 text-sm font-medium mb-3">Translation Language</h3>
+          <div className="bg-gray-800 p-3 sm:p-4 lg:p-[1.5vh] rounded-2xl border border-gray-700 shadow-xl shrink-0">
+            <h3 className="text-gray-400 text-xs sm:text-sm font-medium mb-2 sm:mb-2.5 lg:mb-[1vh]">Translation Language</h3>
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 outline-none"
+              className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-xs sm:text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 sm:p-3 lg:p-[1.2vh] outline-none"
             >
               <option value="arabic">Arabic — عربي</option>
               <option value="french">French — Français</option>
@@ -201,11 +201,11 @@ export default function Dashboard() {
             </select>
           </div>
           
-          <div className="mt-5">
+          <div className="shrink-0">
             <button 
               onClick={handleProcess}
               disabled={!imageFile || isProcessing || corners.length !== 4}
-              className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3.5 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-base sm:text-lg flex items-center justify-center space-x-3"
+              className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 sm:py-3 lg:py-[1.4vh] rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-sm sm:text-base lg:text-lg flex items-center justify-center space-x-3"
             >
               {isProcessing ? (
                 <>
@@ -217,7 +217,7 @@ export default function Dashboard() {
               )}
             </button>
             {error && (
-              <p className="text-red-400 text-sm mt-3 bg-red-900/20 p-3 rounded-lg border border-red-800">
+              <p className="text-red-400 text-sm mt-2 bg-red-900/20 p-2.5 rounded-lg border border-red-800">
                 {error}
               </p>
             )}
