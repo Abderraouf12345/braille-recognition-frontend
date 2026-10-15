@@ -23,6 +23,9 @@ export default function Dashboard() {
   const [showAbout, setShowAbout] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Four-corner selection fits screen; Result overlay allows full-page scrolling
+  const isCornerSelectionMode = Boolean(imageFile && !overlayImage);
+
   const handleReset = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -120,19 +123,21 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 flex flex-col font-sans selection:bg-blue-500/30">
-      <header className="mb-8 flex items-start justify-between gap-4">
+    <div className={`min-h-screen bg-gray-950 text-gray-100 p-4 sm:p-5 lg:p-6 flex flex-col font-sans selection:bg-blue-500/30 ${
+      isCornerSelectionMode ? "lg:h-screen lg:max-h-screen lg:overflow-hidden" : ""
+    }`}>
+      <header className="mb-4 flex items-start justify-between gap-4 shrink-0">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             Braille Recognition
           </h1>
-          <p className="text-gray-500 mt-2">AI-powered Braille recognition &amp; multi-language translation</p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">AI-powered Braille recognition &amp; multi-language translation</p>
         </div>
         <div className="flex items-center gap-2">
           {imageFile && (
             <button
               onClick={handleReset}
-              className="flex items-center gap-2 text-sm text-gray-400 hover:text-red-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0 mt-1"
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-red-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0"
               title="Clear image and start over"
             >
               <RotateCcw className="w-4 h-4" />
@@ -141,7 +146,7 @@ export default function Dashboard() {
           )}
           <button
             onClick={() => setShowAbout(true)}
-            className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0 mt-1"
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0"
           >
             <Info className="w-4 h-4" />
             About
@@ -149,10 +154,14 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
+      <div className={`flex-1 flex flex-col lg:flex-row gap-6 min-h-0 ${
+        isCornerSelectionMode ? "lg:overflow-hidden" : ""
+      }`}>
         
         {/* Left Side: Workspace */}
-        <div className="flex-1 flex flex-col min-h-[500px] lg:min-h-0 relative">
+        <div className={`flex-1 flex flex-col relative ${
+          isCornerSelectionMode ? "min-h-[420px] lg:min-h-0 h-full" : "min-h-[500px]"
+        }`}>
           <ImageWorkspace 
             imageFile={imageFile} 
             setImageFile={(file) => {
@@ -168,11 +177,13 @@ export default function Dashboard() {
         </div>
 
         {/* Right Side: Controls & Results */}
-        <div className="w-full lg:w-[450px] xl:w-[500px] flex flex-col shrink-0 overflow-y-auto pr-2 custom-scrollbar">
+        <div className={`w-full lg:w-[420px] xl:w-[460px] flex flex-col shrink-0 pr-1 lg:pr-2 custom-scrollbar ${
+          isCornerSelectionMode ? "lg:h-full lg:overflow-y-auto" : ""
+        }`}>
           
           <LightDial angle={lightAngle} setAngle={setLightAngle} />
           
-          <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700 shadow-xl mt-6">
+          <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700 shadow-xl mt-5">
             <h3 className="text-gray-400 text-sm font-medium mb-3">Translation Language</h3>
             <select
               value={language}
@@ -190,11 +201,11 @@ export default function Dashboard() {
             </select>
           </div>
           
-          <div className="mt-6">
+          <div className="mt-5">
             <button 
               onClick={handleProcess}
               disabled={!imageFile || isProcessing || corners.length !== 4}
-              className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-lg flex items-center justify-center space-x-3"
+              className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3.5 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-base sm:text-lg flex items-center justify-center space-x-3"
             >
               {isProcessing ? (
                 <>
@@ -222,7 +233,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Footer ── */}
-      <footer className="mt-8 pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+      <footer className="mt-3 pt-3 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-600 shrink-0">
         <span>© {new Date().getFullYear()} Braille Recognition — All rights reserved.</span>
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <a

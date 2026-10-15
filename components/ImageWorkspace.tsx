@@ -37,6 +37,12 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
     }
   }, [imageFile]);
 
+  useEffect(() => {
+    const handleResize = () => setImgSize(prev => ({ ...prev }));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget;
     setImgSize({ width: naturalWidth, height: naturalHeight });
@@ -68,7 +74,7 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-900 rounded-2xl overflow-visible border border-gray-800 shadow-2xl relative">
+    <div className="w-full h-full min-h-0 flex flex-col bg-gray-900 rounded-2xl overflow-visible border border-gray-800 shadow-2xl relative p-2 sm:p-3">
       {isOptimizing ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8">
           <Loader2 className="w-12 h-12 text-blue-400 animate-spin mb-4" />
@@ -76,7 +82,7 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
           <span className="text-gray-500 text-sm mt-1">Scaling safely under upload limits</span>
         </div>
       ) : !imageUrl ? (
-        <label className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-800/50 transition-colors">
+        <label className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-800/50 transition-colors rounded-xl border border-dashed border-gray-800 hover:border-gray-700">
           <Upload className="w-12 h-12 text-gray-500 mb-4" />
           <span className="text-gray-300 font-medium">Click to upload Braille Image</span>
           <span className="text-gray-600 text-sm mt-2">JPG, PNG, WebP, TIFF, BMP</span>
@@ -112,17 +118,17 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
           />
         </label>
       ) : overlayImage ? (
-        <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-black p-4">
-          <div className="relative w-full h-full flex items-center justify-center">
+        <div className="relative w-full flex items-center justify-center bg-black p-4 rounded-xl border border-gray-800 shadow-2xl">
+          <div className="relative w-full flex flex-col items-center justify-center">
             <img 
               src={overlayImage} 
               alt="Overlay Confirmation" 
-              className="max-w-full max-h-full object-contain pointer-events-none select-none"
+              className="w-full h-auto object-contain pointer-events-none select-none rounded-lg"
             />
             {onClearOverlay && (
               <button
                 onClick={onClearOverlay}
-                className="absolute bottom-4 right-4 bg-gray-800/90 hover:bg-gray-700 text-white px-4 py-2 rounded-xl border border-gray-700 shadow-md transition-all text-sm font-medium hover:scale-105 active:scale-95"
+                className="self-end mt-4 bg-gray-800/90 hover:bg-gray-700 text-white px-4 py-2 rounded-xl border border-gray-700 shadow-md transition-all text-sm font-medium hover:scale-105 active:scale-95"
               >
                 Edit Corners
               </button>
@@ -132,7 +138,7 @@ export default function ImageWorkspace({ imageFile, setImageFile, corners, setCo
       ) : (
         <div 
           ref={containerRef}
-          className="relative flex-1 w-full h-full flex items-center justify-center overflow-visible bg-black"
+          className="relative flex-1 w-full h-full min-h-0 flex items-center justify-center overflow-visible bg-black rounded-xl"
         >
           <div className="relative w-full h-full flex items-center justify-center overflow-visible">
             {/* The image acts as the coordinate space reference */}
