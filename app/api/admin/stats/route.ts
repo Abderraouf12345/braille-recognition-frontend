@@ -17,6 +17,7 @@ export async function GET(request: Request) {
         connected: false,
         message:
           "Upstash Redis is not connected yet. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in your Vercel Environment Variables.",
+        totalUniqueDevices: 0,
         totalUniqueVisitors: 0,
         totalVisits: 0,
         countryUniqueVisitors: {},
@@ -26,38 +27,74 @@ export async function GET(request: Request) {
     }
 
     // Retrieve aggregate statistics
-    const [totalUniqueVisitors, totalVisitsRaw, countryUnique, countryTotal, recentIps] =
-      await Promise.all([
-        redis.scard("all_unique_ips"),
-        redis.get<string | number>("total_page_visits"),
-        redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
-        redis.hgetall<Record<string, number | string>>("country_total_visits"),
-        redis.zrange<string[]>("visitors_by_last_seen", 0, 99, { rev: true }),
-      ]);
+    const [
+      totalUniqueDevicesRaw,
+      totalUniqueIpsRaw,
+      totalVisitsRaw,
+      countryUnique,
+      countryTotal,
+      recentDeviceIds,
+      recentIps,
+    ] = await Promise.all([
+      redis.scard("all_unique_devices"),
+      redis.scard("all_unique_ips"),
+      redis.get<string | number>("total_page_visits"),
+      redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
+      redis.hgetall<Record<string, number | string>>("country_total_visits"),
+      redis.zrange<string[]>("devices_by_last_seen", 0, 99, { rev: true }),
+      redis.zrange<string[]>("visitors_by_last_seen", 0, 99, { rev: true }),
+    ]);
 
+    const totalUniqueDevices = Number(totalUniqueDevicesRaw) || 0;
+    const totalUniqueIps = Number(totalUniqueIpsRaw) || 0;
     const totalVisits = Number(totalVisitsRaw) || 0;
 
-    // Fetch details for the latest 100 unique visitor IPs
-    let visitors: Array<Record<string, any>> = [];
-    if (recentIps && recentIps.length > 0) {
-      const pipeline = redis.pipeline();
-      for (const ip of recentIps) {
-        pipeline.hgetall(`visitor:${ip}`);
+    // Fetch device records
+    const visitorsMap = new Map<string, any>();
+
+    if (recentDeviceIds && recentDeviceIds.length > 0) {
+      const devPipeline = redis.pipeline();
+      for (const devId of recentDeviceIds) {
+        devPipeline.hgetall(`device:${devId}`);
       }
-      const results = await pipeline.exec();
-      visitors = results
-        .map((res: any, idx: number) => {
-          if (!res) {
-            return { ip: recentIps[idx] };
-          }
-          return res;
-        })
-        .filter(Boolean);
+      const devResults = await devPipeline.exec();
+      devResults.forEach((res: any, idx: number) => {
+        if (res && Object.keys(res).length > 0) {
+          visitorsMap.set(recentDeviceIds[idx], res);
+        }
+      });
     }
+
+    // Also load any legacy IP records that don't have a device record yet
+    if (recentIps && recentIps.length > 0) {
+      const ipPipeline = redis.pipeline();
+      for (const ip of recentIps) {
+        ipPipeline.hgetall(`visitor:${ip}`);
+      }
+      const ipResults = await ipPipeline.exec();
+      ipResults.forEach((res: any, idx: number) => {
+        if (res && Object.keys(res).length > 0) {
+          const ip = recentIps[idx];
+          // If this IP isn't represented by an existing device, add it as a legacy visitor
+          const alreadyCovered = Array.from(visitorsMap.values()).some((v) => v.ip === ip);
+          if (!alreadyCovered) {
+            visitorsMap.set(`legacy_${ip}`, {
+              deviceId: `legacy_${ip}`,
+              ip: ip,
+              previousIps: ip,
+              ...res,
+            });
+          }
+        }
+      });
+    }
+
+    const visitors = Array.from(visitorsMap.values());
 
     return NextResponse.json({
       connected: true,
-      totalUniqueVisitors,
+      totalUniqueDevices: totalUniqueDevices > 0 ? totalUniqueDevices : totalUniqueIps,
+      totalUniqueVisitors: totalUniqueIps,
       totalVisits,
       countryUniqueVisitors: countryUnique || {},
       countryTotalVisits: countryTotal || {},

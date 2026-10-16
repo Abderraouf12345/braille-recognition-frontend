@@ -17,10 +17,15 @@ import {
   MapPin,
   Clock,
   Laptop,
+  Smartphone,
+  Network,
+  History,
 } from "lucide-react";
 
 interface VisitorRecord {
+  deviceId?: string;
   ip: string;
+  previousIps?: string;
   country?: string;
   city?: string;
   region?: string;
@@ -33,6 +38,7 @@ interface VisitorRecord {
 interface StatsResponse {
   connected: boolean;
   message?: string;
+  totalUniqueDevices: number;
   totalUniqueVisitors: number;
   totalVisits: number;
   countryUniqueVisitors: Record<string, string | number>;
@@ -48,7 +54,6 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Initialize key from URL or sessionStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -96,9 +101,22 @@ export default function AdminDashboard() {
   function handleExportCsv() {
     if (!stats || !stats.visitors || stats.visitors.length === 0) return;
 
-    const headers = ["IP Address", "Country", "City", "Region", "Visits", "First Seen", "Last Seen", "User Agent"];
+    const headers = [
+      "Device ID",
+      "Current IP",
+      "Previous IPs History",
+      "Country",
+      "City",
+      "Region",
+      "Visits",
+      "First Seen",
+      "Last Seen",
+      "User Agent",
+    ];
     const rows = stats.visitors.map((v) => [
+      `"${v.deviceId || ""}"`,
       `"${v.ip || ""}"`,
+      `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
       `"${v.country || "Unknown"}"`,
       `"${v.city || "Unknown"}"`,
       `"${v.region || ""}"`,
@@ -108,7 +126,8 @@ export default function AdminDashboard() {
       `"${(v.userAgent || "").replace(/"/g, '""')}"`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -118,7 +137,6 @@ export default function AdminDashboard() {
     document.body.removeChild(link);
   }
 
-  // Filter visitors by IP, country, or city
   const filteredVisitors = useMemo(() => {
     if (!stats?.visitors) return [];
     if (!searchQuery.trim()) return stats.visitors;
@@ -126,12 +144,13 @@ export default function AdminDashboard() {
     return stats.visitors.filter(
       (v) =>
         (v.ip && v.ip.toLowerCase().includes(q)) ||
+        (v.deviceId && v.deviceId.toLowerCase().includes(q)) ||
+        (v.previousIps && v.previousIps.toLowerCase().includes(q)) ||
         (v.country && v.country.toLowerCase().includes(q)) ||
         (v.city && v.city.toLowerCase().includes(q))
     );
   }, [stats?.visitors, searchQuery]);
 
-  // Sort country breakdown by unique visitor count
   const sortedCountries = useMemo(() => {
     if (!stats?.countryUniqueVisitors) return [];
     return Object.entries(stats.countryUniqueVisitors)
@@ -143,7 +162,6 @@ export default function AdminDashboard() {
       .sort((a, b) => b.count - a.count);
   }, [stats?.countryUniqueVisitors, stats?.countryTotalVisits]);
 
-  // Format date helper
   const formatDate = (isoStr?: string) => {
     if (!isoStr) return "—";
     try {
@@ -160,6 +178,11 @@ export default function AdminDashboard() {
     }
   };
 
+  const isMobile = (ua?: string) => {
+    if (!ua) return false;
+    return /mobile|android|iphone|ipad|phone/i.test(ua);
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
@@ -170,7 +193,7 @@ export default function AdminDashboard() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-white">Admin Dashboard</h1>
-              <p className="text-xs text-slate-400">Permanent Unique Visitor Intelligence</p>
+              <p className="text-xs text-slate-400">Persistent Device & IP Intelligence</p>
             </div>
           </div>
 
@@ -215,7 +238,7 @@ export default function AdminDashboard() {
             <Link href="/" className="hover:text-slate-300 transition-colors flex items-center gap-1">
               <ArrowLeft className="w-3.5 h-3.5" /> Back to App
             </Link>
-            <span>v5.0 Permanent IP Tracker</span>
+            <span>v5.1 Hybrid Device Tracker</span>
           </div>
         </div>
       </div>
@@ -223,8 +246,8 @@ export default function AdminDashboard() {
   }
 
   const avgVisits =
-    stats && stats.totalUniqueVisitors > 0
-      ? (stats.totalVisits / stats.totalUniqueVisitors).toFixed(1)
+    stats && stats.totalUniqueDevices > 0
+      ? (stats.totalVisits / stats.totalUniqueDevices).toFixed(1)
       : "1.0";
 
   return (
@@ -245,11 +268,11 @@ export default function AdminDashboard() {
                 <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
                   Visitor Intelligence
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
-                    Permanent All-Time
+                    Persistent Device + IP
                   </span>
                 </h1>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Tracking unique visitors by IP address & edge geolocation permanently
+                  Tracks physical devices permanently across Wi-Fi restarts, 4G switching, and IP changes
                 </p>
               </div>
             </div>
@@ -284,7 +307,7 @@ export default function AdminDashboard() {
                 Upstash Redis Not Configured in Vercel
               </div>
               <p className="text-xs text-slate-300 leading-relaxed">
-                To start permanently tracking all visitors across container restarts, set{" "}
+                Set{" "}
                 <code className="text-amber-300 bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-500/20">
                   UPSTASH_REDIS_REST_URL
                 </code>{" "}
@@ -292,7 +315,7 @@ export default function AdminDashboard() {
                 <code className="text-amber-300 bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-500/20">
                   UPSTASH_REDIS_REST_TOKEN
                 </code>{" "}
-                in your Vercel Project Settings → Environment Variables.
+                in your Vercel Project Settings.
               </p>
             </div>
             <a
@@ -311,16 +334,31 @@ export default function AdminDashboard() {
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                All-Time Unique Users
+                True Unique Users
               </span>
               <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">
                 <Users className="w-4 h-4" />
               </div>
             </div>
             <div className="text-3xl font-extrabold text-white tracking-tight">
+              {stats?.totalUniqueDevices.toLocaleString() || 0}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Physical devices (immune to router restarts)</p>
+          </div>
+
+          <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Public Network IPs
+              </span>
+              <div className="p-2 bg-purple-500/10 text-purple-400 rounded-xl">
+                <Network className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-white tracking-tight">
               {stats?.totalUniqueVisitors.toLocaleString() || 0}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Unique IP addresses permanently recorded</p>
+            <p className="text-[11px] text-slate-400 mt-1">Distinct Wi-Fi/4G IP connections seen</p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
@@ -335,7 +373,7 @@ export default function AdminDashboard() {
             <div className="text-3xl font-extrabold text-white tracking-tight">
               {stats?.totalVisits.toLocaleString() || 0}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Total page loads & session starts</p>
+            <p className="text-[11px] text-slate-400 mt-1">Total page loads & image translations</p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
@@ -350,20 +388,7 @@ export default function AdminDashboard() {
             <div className="text-3xl font-extrabold text-white tracking-tight">
               {sortedCountries.length}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Distinct countries worldwide</p>
-          </div>
-
-          <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Avg. Visits / User
-              </span>
-              <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl">
-                <Activity className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="text-3xl font-extrabold text-white tracking-tight">{avgVisits}</div>
-            <p className="text-[11px] text-slate-400 mt-1">Average frequency per unique visitor</p>
+            <p className="text-[11px] text-slate-400 mt-1">Worldwide geographic coverage</p>
           </div>
         </div>
 
@@ -376,10 +401,8 @@ export default function AdminDashboard() {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {sortedCountries.slice(0, 12).map((item) => {
-                const pct =
-                  stats?.totalUniqueVisitors && stats.totalUniqueVisitors > 0
-                    ? Math.round((item.count / stats.totalUniqueVisitors) * 100)
-                    : 100;
+                const total = stats?.totalUniqueDevices || 1;
+                const pct = Math.round((item.count / total) * 100);
                 return (
                   <div
                     key={item.country}
@@ -408,18 +431,18 @@ export default function AdminDashboard() {
             <div>
               <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Users className="w-4 h-4 text-indigo-400" />
-                Permanent IP Visitor Records
+                Persistent Visitor & Device Records
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Showing {filteredVisitors.length} of {stats?.visitors?.length || 0} recorded visitors
               </p>
             </div>
 
-            <div className="relative w-full sm:w-72">
+            <div className="relative w-full sm:w-80">
               <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search by IP, Country, or City..."
+                placeholder="Search by IP, Device ID, or City..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -431,12 +454,12 @@ export default function AdminDashboard() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800/80 uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="py-3 px-4 font-semibold">IP Address</th>
+                  <th className="py-3 px-4 font-semibold">Device & Identity</th>
+                  <th className="py-3 px-4 font-semibold">Current IP & Network History</th>
                   <th className="py-3 px-4 font-semibold">Location</th>
                   <th className="py-3 px-4 font-semibold">Visits</th>
                   <th className="py-3 px-4 font-semibold">First Seen</th>
                   <th className="py-3 px-4 font-semibold">Last Seen</th>
-                  <th className="py-3 px-4 font-semibold">User Agent / Device</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
@@ -447,56 +470,100 @@ export default function AdminDashboard() {
                         ? "Loading visitor data..."
                         : searchQuery
                         ? "No visitors matched your search query."
-                        : "No visitors recorded yet. Visit the homepage to log your first record!"}
+                        : "No visitors recorded yet."}
                     </td>
                   </tr>
                 ) : (
-                  filteredVisitors.map((v, i) => (
-                    <tr key={v.ip || i} className="hover:bg-slate-800/20 transition-colors">
-                      <td className="py-3 px-4 font-mono font-medium text-slate-200">
-                        <span className="px-2 py-1 rounded-md bg-slate-950 border border-slate-800">
-                          {v.ip}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5 font-medium text-slate-200">
-                          <MapPin className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                          <span>
-                            {v.country || "Unknown"}
-                            {v.city && v.city !== "Unknown" ? `, ${v.city}` : ""}
-                          </span>
-                        </div>
-                        {v.region && (
-                          <div className="text-[10px] text-slate-500 ml-5 font-mono">
-                            Region: {v.region}
+                  filteredVisitors.map((v, i) => {
+                    const mobile = isMobile(v.userAgent);
+                    const prevIps = (v.previousIps || "")
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    const hasMultipleIps = prevIps.length > 1;
+
+                    return (
+                      <tr key={v.deviceId || v.ip || i} className="hover:bg-slate-800/20 transition-colors">
+                        {/* Device & Identity */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-slate-800/70 rounded-lg text-slate-400">
+                              {mobile ? (
+                                <Smartphone className="w-3.5 h-3.5 text-indigo-400" />
+                              ) : (
+                                <Laptop className="w-3.5 h-3.5 text-sky-400" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-mono text-[11px] font-semibold text-slate-200">
+                                {v.deviceId && !v.deviceId.startsWith("legacy_")
+                                  ? v.deviceId.slice(0, 14) + "..."
+                                  : "Web Visitor"}
+                              </div>
+                              <div className="text-[10px] text-slate-500 max-w-[150px] truncate" title={v.userAgent}>
+                                {mobile ? "Mobile Device" : "Desktop Computer"}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          {v.visits || 1} {Number(v.visits) === 1 ? "visit" : "visits"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-400">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-500" />
-                          {formatDate(v.firstSeen)}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-slate-300 font-medium">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-indigo-400" />
-                          {formatDate(v.lastSeen)}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 max-w-xs truncate text-[11px] text-slate-500" title={v.userAgent}>
-                        <div className="flex items-center gap-1.5">
-                          <Laptop className="w-3.5 h-3.5 shrink-0 text-slate-600" />
-                          <span className="truncate">{v.userAgent || "Unknown Device"}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+
+                        {/* Current IP & History */}
+                        <td className="py-3 px-4 font-mono">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-slate-200">{v.ip}</span>
+                            {hasMultipleIps && (
+                              <div
+                                className="inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded"
+                                title={`All IPs used by this device: ${v.previousIps}`}
+                              >
+                                <History className="w-2.5 h-2.5" />
+                                {prevIps.length} IPs recorded
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Location */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5 font-medium text-slate-200">
+                            <MapPin className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                            <span>
+                              {v.country || "Unknown"}
+                              {v.city && v.city !== "Unknown" ? `, ${v.city}` : ""}
+                            </span>
+                          </div>
+                          {v.region && (
+                            <div className="text-[10px] text-slate-500 ml-5 font-mono">
+                              Region: {v.region}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Visits */}
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {v.visits || 1} {Number(v.visits) === 1 ? "visit" : "visits"}
+                          </span>
+                        </td>
+
+                        {/* First Seen */}
+                        <td className="py-3 px-4 text-slate-400">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-500" />
+                            {formatDate(v.firstSeen)}
+                          </div>
+                        </td>
+
+                        {/* Last Seen */}
+                        <td className="py-3 px-4 text-slate-300 font-medium">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-indigo-400" />
+                            {formatDate(v.lastSeen)}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
