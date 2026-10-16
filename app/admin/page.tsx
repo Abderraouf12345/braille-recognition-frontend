@@ -62,6 +62,94 @@ function getOsDisplay(v: VisitorRecord): string {
   return "Unknown";
 }
 
+interface CountryInfo {
+  name: string;
+  flag: string;
+  code: string;
+}
+
+function getCountryDetails(code?: string): CountryInfo {
+  if (!code || code === "Unknown") {
+    return { name: "Unknown Location", flag: "🌐", code: "Unknown" };
+  }
+
+  const cleanCode = code.trim().toUpperCase();
+
+  const manualNames: Record<string, string> = {
+    DZ: "Algeria",
+    TW: "Taiwan",
+    BG: "Bulgaria",
+    US: "United States",
+    FR: "France",
+    GB: "United Kingdom",
+    UK: "United Kingdom",
+    CA: "Canada",
+    DE: "Germany",
+    ES: "Spain",
+    IT: "Italy",
+    EG: "Egypt",
+    SA: "Saudi Arabia",
+    AE: "United Arab Emirates",
+    MA: "Morocco",
+    TN: "Tunisia",
+    QA: "Qatar",
+    KW: "Kuwait",
+    OM: "Oman",
+    JO: "Jordan",
+    LB: "Lebanon",
+    IQ: "Iraq",
+    TR: "Turkey",
+    IN: "India",
+    CN: "China",
+    JP: "Japan",
+    KR: "South Korea",
+    BR: "Brazil",
+    AU: "Australia",
+    RU: "Russia",
+    NL: "Netherlands",
+    SE: "Sweden",
+    CH: "Switzerland",
+    BE: "Belgium",
+    AT: "Austria",
+    PL: "Poland",
+    SG: "Singapore",
+    MY: "Malaysia",
+    ID: "Indonesia",
+    PS: "Palestine",
+    SY: "Syria",
+    YE: "Yemen",
+    SD: "Sudan",
+    LY: "Libya",
+    BH: "Bahrain",
+    MR: "Mauritania",
+    SO: "Somalia",
+  };
+
+  let name = manualNames[cleanCode];
+
+  if (!name && typeof Intl !== "undefined" && typeof Intl.DisplayNames === "function") {
+    try {
+      const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+      name = regionNames.of(cleanCode) || cleanCode;
+    } catch {
+      name = cleanCode;
+    }
+  }
+
+  name = name || cleanCode;
+
+  let flag = "🌐";
+  if (/^[A-Z]{2}$/.test(cleanCode)) {
+    try {
+      flag = String.fromCodePoint(...cleanCode.split("").map((c) => 127397 + c.charCodeAt(0)));
+    } catch {
+      flag = "🌐";
+    }
+  }
+
+  return { name, flag, code: cleanCode };
+}
+
 export default function AdminDashboard() {
   const [adminKey, setAdminKey] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -123,7 +211,8 @@ export default function AdminDashboard() {
       "Previous IPs History",
       "Browser",
       "Operating System",
-      "Country",
+      "Country Name",
+      "Country Code",
       "City",
       "Region",
       "Visits",
@@ -131,20 +220,24 @@ export default function AdminDashboard() {
       "Last Seen",
       "User Agent",
     ];
-    const rows = stats.visitors.map((v) => [
-      `"${v.deviceId || ""}"`,
-      `"${v.ip || ""}"`,
-      `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
-      `"${getBrowserDisplay(v).replace(/"/g, '""')}"`,
-      `"${getOsDisplay(v).replace(/"/g, '""')}"`,
-      `"${v.country || "Unknown"}"`,
-      `"${v.city || "Unknown"}"`,
-      `"${v.region || ""}"`,
-      `"${v.visits || 1}"`,
-      `"${v.firstSeen || ""}"`,
-      `"${v.lastSeen || ""}"`,
-      `"${(v.userAgent || "").replace(/"/g, '""')}"`,
-    ]);
+    const rows = stats.visitors.map((v) => {
+      const cDetails = getCountryDetails(v.country);
+      return [
+        `"${v.deviceId || ""}"`,
+        `"${v.ip || ""}"`,
+        `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
+        `"${getBrowserDisplay(v).replace(/"/g, '""')}"`,
+        `"${getOsDisplay(v).replace(/"/g, '""')}"`,
+        `"${cDetails.name.replace(/"/g, '""')}"`,
+        `"${(v.country || "Unknown").replace(/"/g, '""')}"`,
+        `"${(v.city || "Unknown").replace(/"/g, '""')}"`,
+        `"${(v.region || "").replace(/"/g, '""')}"`,
+        `"${v.visits || 1}"`,
+        `"${v.firstSeen || ""}"`,
+        `"${v.lastSeen || ""}"`,
+        `"${(v.userAgent || "").replace(/"/g, '""')}"`,
+      ];
+    });
 
     const csvContent =
       "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -186,19 +279,43 @@ export default function AdminDashboard() {
     if (!stats?.visitors) return [];
     if (!searchQuery.trim()) return stats.visitors;
     const q = searchQuery.toLowerCase().trim();
-    return stats.visitors.filter(
-      (v) =>
+    return stats.visitors.filter((v) => {
+      const cDetails = getCountryDetails(v.country);
+      return (
         (v.ip && v.ip.toLowerCase().includes(q)) ||
         (v.deviceId && v.deviceId.toLowerCase().includes(q)) ||
         (v.previousIps && v.previousIps.toLowerCase().includes(q)) ||
         (v.country && v.country.toLowerCase().includes(q)) ||
+        cDetails.name.toLowerCase().includes(q) ||
         (v.city && v.city.toLowerCase().includes(q)) ||
         getBrowserDisplay(v).toLowerCase().includes(q) ||
         getOsDisplay(v).toLowerCase().includes(q)
-    );
+      );
+    });
   }, [stats?.visitors, searchQuery]);
 
   const sortedCountries = useMemo(() => {
+    // 1. Calculate directly from active visitor device records if available for 100% exact counts
+    if (stats?.visitors && stats.visitors.length > 0) {
+      const counts: Record<string, { count: number; totalVisits: number }> = {};
+      for (const v of stats.visitors) {
+        const c = v.country && v.country !== "Unknown" ? v.country : "Unknown";
+        if (!counts[c]) {
+          counts[c] = { count: 0, totalVisits: 0 };
+        }
+        counts[c].count += 1;
+        counts[c].totalVisits += Number(v.visits) || 1;
+      }
+      return Object.entries(counts)
+        .map(([country, data]) => ({
+          country,
+          count: data.count,
+          totalVisits: data.totalVisits,
+        }))
+        .sort((a, b) => b.count - a.count);
+    }
+
+    // 2. Fallback to aggregate Redis hash if visitors list is empty
     if (!stats?.countryUniqueVisitors) return [];
     return Object.entries(stats.countryUniqueVisitors)
       .map(([country, count]) => ({
@@ -207,7 +324,11 @@ export default function AdminDashboard() {
         totalVisits: Number(stats.countryTotalVisits?.[country]) || Number(count),
       }))
       .sort((a, b) => b.count - a.count);
-  }, [stats?.countryUniqueVisitors, stats?.countryTotalVisits]);
+  }, [stats?.visitors, stats?.countryUniqueVisitors, stats?.countryTotalVisits]);
+
+  const totalCountryUsers = useMemo(() => {
+    return sortedCountries.reduce((sum, item) => sum + item.count, 0) || 1;
+  }, [sortedCountries]);
 
   const formatDate = (isoStr?: string) => {
     if (!isoStr) return "—";
@@ -451,28 +572,65 @@ export default function AdminDashboard() {
         {/* Geolocation Top Countries Breakdown */}
         {sortedCountries.length > 0 && (
           <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-sky-400" />
-              Top Visiting Countries
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="flex items-center justify-between mb-3.5">
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-sky-400" />
+                Top Visiting Countries
+              </h2>
+              <span className="text-[11px] text-slate-400">
+                Total classified users: <strong className="text-slate-200">{totalCountryUsers}</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {sortedCountries.slice(0, 12).map((item) => {
-                const total = stats?.totalUniqueDevices || 1;
-                const pct = Math.round((item.count / total) * 100);
+                const cDetails = getCountryDetails(item.country);
+                const rawPct = (item.count / totalCountryUsers) * 100;
+                const pctDisplay = rawPct % 1 === 0 ? rawPct.toFixed(0) : rawPct.toFixed(1);
+
                 return (
                   <div
                     key={item.country}
-                    className="p-3 bg-slate-950/60 border border-slate-800/60 rounded-xl flex flex-col justify-between"
+                    className="p-3.5 bg-slate-950/70 border border-slate-800/70 hover:border-slate-700/80 rounded-xl flex flex-col justify-between transition-colors shadow-sm"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-200 tracking-wide">
-                        {item.country}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">{pct}%</span>
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xl shrink-0" role="img" aria-label={cDetails.name}>
+                            {cDetails.flag}
+                          </span>
+                          <span
+                            className="text-xs font-bold text-slate-100 truncate tracking-wide"
+                            title={`${cDetails.name} (${cDetails.code})`}
+                          >
+                            {cDetails.name}
+                          </span>
+                        </div>
+                        {cDetails.code !== "Unknown" && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-semibold shrink-0">
+                            {cDetails.code}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Visual Percentage Progress Bar */}
+                      <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden my-2 border border-slate-800/60">
+                        <div
+                          className="bg-gradient-to-r from-sky-500 to-indigo-500 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(5, Math.min(100, rawPct))}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="mt-2 flex items-baseline justify-between text-xs">
-                      <span className="text-slate-400 text-[11px]">{item.count} users</span>
-                      <span className="text-slate-500 text-[10px]">{item.totalVisits} views</span>
+
+                    <div className="mt-1 flex items-baseline justify-between text-xs">
+                      <span className="text-slate-400 text-[11px]">
+                        <strong className="text-slate-200">{item.count}</strong> {item.count === 1 ? "user" : "users"}
+                        <span className="text-slate-600 mx-1.5">·</span>
+                        <span className="text-slate-400">{item.totalVisits} views</span>
+                      </span>
+                      <span className="text-xs font-bold text-sky-400 font-mono">
+                        {pctDisplay}%
+                      </span>
                     </div>
                   </div>
                 );
@@ -591,18 +749,38 @@ export default function AdminDashboard() {
 
                         {/* Location */}
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-1.5 font-medium text-slate-200">
-                            <MapPin className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                            <span>
-                              {v.country || "Unknown"}
-                              {v.city && v.city !== "Unknown" ? `, ${v.city}` : ""}
-                            </span>
-                          </div>
-                          {v.region && (
-                            <div className="text-[10px] text-slate-500 ml-5 font-mono">
-                              Region: {v.region}
-                            </div>
-                          )}
+                          {(() => {
+                            const cDetails = getCountryDetails(v.country);
+                            return (
+                              <div className="flex items-start gap-2">
+                                <span className="text-base shrink-0 mt-0.5" role="img" aria-label={cDetails.name}>
+                                  {cDetails.flag}
+                                </span>
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-slate-100 text-xs">
+                                      {cDetails.name}
+                                    </span>
+                                    {cDetails.code !== "Unknown" && (
+                                      <span className="text-[10px] text-slate-500 font-mono">
+                                        ({cDetails.code})
+                                      </span>
+                                    )}
+                                  </div>
+                                  {v.city && v.city !== "Unknown" ? (
+                                    <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                      <MapPin className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+                                      {v.city}{v.region ? `, Region ${v.region}` : ""}
+                                    </span>
+                                  ) : v.region ? (
+                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                      Region: {v.region}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Visits */}
