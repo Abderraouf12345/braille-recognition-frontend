@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordVisitor } from "@/lib/tracker";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Allow up to 60s for AI inference on Vercel
@@ -10,6 +11,9 @@ async function proxyHandler(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
+    // Record visitor IP and geolocation permanently on every API call (non-blocking)
+    recordVisitor(request.headers).catch(() => {});
+
     const resolvedParams = await params;
     const path = resolvedParams.path || [];
 
