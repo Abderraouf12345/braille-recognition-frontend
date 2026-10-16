@@ -55,22 +55,13 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
     await redis.sadd("all_unique_ips", clientIp);
     await redis.incr("total_page_visits");
 
-    // 5. Manage Device Profile in Redis
+    // 5. Manage Device Profile in Redis (Each device ID is strictly isolated)
     const deviceKey = `device:${deviceId}`;
-    const legacyKey = `visitor:${clientIp}`;
 
-    let existing = await redis.hgetall<Record<string, string>>(deviceKey);
-
-    // If no device key yet, check legacy visitor key for migration
-    if (!existing || Object.keys(existing).length === 0) {
-      const legacy = await redis.hgetall<Record<string, string>>(legacyKey);
-      if (legacy && Object.keys(legacy).length > 0) {
-        existing = legacy;
-      }
-    }
+    const existing = await redis.hgetall<Record<string, string>>(deviceKey);
 
     if (!existing || Object.keys(existing).length === 0) {
-      // Brand new physical device / user
+      // Brand new physical device / user / browser sandbox
       await redis.hset(deviceKey, {
         deviceId,
         ip: clientIp,
@@ -108,6 +99,17 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
         visits: currentVisits + 1,
       };
 
+      // Backfill browser and OS if missing or previously Unknown
+      if ((!existing.browser || existing.browser === "Unknown") && browser !== "Unknown") {
+        updateData.browser = browser;
+      }
+      if ((!existing.os || existing.os === "Unknown") && os !== "Unknown") {
+        updateData.os = os;
+      }
+      if (!existing.userAgent || existing.userAgent === "Unknown") {
+        updateData.userAgent = userAgent.slice(0, 200);
+      }
+
       // If location was previously Unknown and now available, update it
       if ((!existing.country || existing.country === "Unknown") && country !== "Unknown") {
         updateData.country = country;
@@ -118,18 +120,6 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
 
       await redis.hset(deviceKey, updateData);
     }
-
-    // Always maintain legacy key so existing dashboard lookups remain intact
-    await redis.hset(legacyKey, {
-      ip: clientIp,
-      country,
-      city,
-      region,
-      firstSeen: existing?.firstSeen || now,
-      lastSeen: now,
-      visits: existing?.visits ? parseInt(existing.visits, 10) + 1 : 1,
-      userAgent: userAgent.slice(0, 200),
-    });
 
     // Update sorted sets
     await redis.zadd("devices_by_last_seen", { score: timestamp, member: deviceId });
