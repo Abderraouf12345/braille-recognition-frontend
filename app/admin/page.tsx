@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { detectBrowser, detectOS, isMobileUA } from "@/lib/browserDetect";
+import { detectBrowser, detectOS, isMobileUA, classifyVisitor } from "@/lib/browserDetect";
 import {
   Users,
   Globe,
@@ -157,6 +157,7 @@ export default function AdminDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [trafficFilter, setTrafficFilter] = useState<"all" | "humans" | "bots">("all");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -207,6 +208,8 @@ export default function AdminDashboard() {
 
     const headers = [
       "Device ID",
+      "Traffic Classification",
+      "Is Real Human",
       "Current IP",
       "Previous IPs History",
       "Browser",
@@ -222,8 +225,11 @@ export default function AdminDashboard() {
     ];
     const rows = stats.visitors.map((v) => {
       const cDetails = getCountryDetails(v.country);
+      const cls = classifyVisitor(v);
       return [
         `"${v.deviceId || ""}"`,
+        `"${cls.label.replace(/"/g, '""')}"`,
+        `"${cls.isHuman ? "Yes" : "No"}"`,
         `"${v.ip || ""}"`,
         `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
         `"${getBrowserDisplay(v).replace(/"/g, '""')}"`,
@@ -275,12 +281,33 @@ export default function AdminDashboard() {
     }
   }
 
+  const { humanCount, botCount } = useMemo(() => {
+    if (!stats?.visitors) return { humanCount: 0, botCount: 0 };
+    let humans = 0;
+    let bots = 0;
+    for (const v of stats.visitors) {
+      const cls = classifyVisitor(v);
+      if (cls.isHuman) humans++;
+      else bots++;
+    }
+    return { humanCount: humans, botCount: bots };
+  }, [stats?.visitors]);
+
   const filteredVisitors = useMemo(() => {
     if (!stats?.visitors) return [];
-    if (!searchQuery.trim()) return stats.visitors;
+    let list = stats.visitors;
+
+    if (trafficFilter === "humans") {
+      list = list.filter((v) => classifyVisitor(v).isHuman);
+    } else if (trafficFilter === "bots") {
+      list = list.filter((v) => !classifyVisitor(v).isHuman);
+    }
+
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase().trim();
-    return stats.visitors.filter((v) => {
+    return list.filter((v) => {
       const cDetails = getCountryDetails(v.country);
+      const cls = classifyVisitor(v);
       return (
         (v.ip && v.ip.toLowerCase().includes(q)) ||
         (v.deviceId && v.deviceId.toLowerCase().includes(q)) ||
@@ -289,16 +316,24 @@ export default function AdminDashboard() {
         cDetails.name.toLowerCase().includes(q) ||
         (v.city && v.city.toLowerCase().includes(q)) ||
         getBrowserDisplay(v).toLowerCase().includes(q) ||
-        getOsDisplay(v).toLowerCase().includes(q)
+        getOsDisplay(v).toLowerCase().includes(q) ||
+        cls.label.toLowerCase().includes(q) ||
+        cls.reason.toLowerCase().includes(q)
       );
     });
-  }, [stats?.visitors, searchQuery]);
+  }, [stats?.visitors, trafficFilter, searchQuery]);
 
   const sortedCountries = useMemo(() => {
-    // 1. Calculate directly from active visitor device records if available for 100% exact counts
     if (stats?.visitors && stats.visitors.length > 0) {
       const counts: Record<string, { count: number; totalVisits: number }> = {};
-      for (const v of stats.visitors) {
+      const sourceList =
+        trafficFilter === "bots"
+          ? stats.visitors.filter((v) => !classifyVisitor(v).isHuman)
+          : trafficFilter === "humans"
+          ? stats.visitors.filter((v) => classifyVisitor(v).isHuman)
+          : stats.visitors;
+
+      for (const v of sourceList) {
         const c = v.country && v.country !== "Unknown" ? v.country : "Unknown";
         if (!counts[c]) {
           counts[c] = { count: 0, totalVisits: 0 };
@@ -315,7 +350,6 @@ export default function AdminDashboard() {
         .sort((a, b) => b.count - a.count);
     }
 
-    // 2. Fallback to aggregate Redis hash if visitors list is empty
     if (!stats?.countryUniqueVisitors) return [];
     return Object.entries(stats.countryUniqueVisitors)
       .map(([country, count]) => ({
@@ -324,7 +358,7 @@ export default function AdminDashboard() {
         totalVisits: Number(stats.countryTotalVisits?.[country]) || Number(count),
       }))
       .sort((a, b) => b.count - a.count);
-  }, [stats?.visitors, stats?.countryUniqueVisitors, stats?.countryTotalVisits]);
+  }, [stats?.visitors, stats?.countryUniqueVisitors, stats?.countryTotalVisits, trafficFilter]);
 
   const totalCountryUsers = useMemo(() => {
     return sortedCountries.reduce((sum, item) => sum + item.count, 0) || 1;
@@ -511,16 +545,25 @@ export default function AdminDashboard() {
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                True Unique Users
+                Real Human Users
               </span>
-              <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">
+              <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
                 <Users className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-3xl font-extrabold text-white tracking-tight">
-              {stats?.totalUniqueDevices.toLocaleString() || 0}
+            <div className="text-3xl font-extrabold text-white tracking-tight flex items-baseline gap-2">
+              <span>{humanCount.toLocaleString()}</span>
+              {botCount > 0 && (
+                <span className="text-xs font-semibold text-purple-400 px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20">
+                  +{botCount} bots
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Physical devices (immune to router restarts)</p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {botCount > 0
+                ? `${botCount} cloud probes & scanners isolated`
+                : "Genuine physical user devices"}
+            </p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
@@ -641,7 +684,7 @@ export default function AdminDashboard() {
 
         {/* Detailed Visitors Table */}
         <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden">
-          <div className="p-4 md:p-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="p-4 md:p-5 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Users className="w-4 h-4 text-indigo-400" />
@@ -649,18 +692,61 @@ export default function AdminDashboard() {
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Showing {filteredVisitors.length} of {stats?.visitors?.length || 0} recorded visitors
+                {trafficFilter === "humans" && " (Real humans only)"}
+                {trafficFilter === "bots" && " (Bots & scanners only)"}
               </p>
             </div>
 
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search by IP, Device, Browser, OS, or City..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Traffic Filter Tabs */}
+              <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTrafficFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    trafficFilter === "all"
+                      ? "bg-slate-800 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  All ({stats?.visitors?.length || 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrafficFilter("humans")}
+                  className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1 transition-colors ${
+                    trafficFilter === "humans"
+                      ? "bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                      : "text-slate-400 hover:text-emerald-300"
+                  }`}
+                >
+                  <span>👤</span>
+                  <span>Humans ({humanCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrafficFilter("bots")}
+                  className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1 transition-colors ${
+                    trafficFilter === "bots"
+                      ? "bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-sm"
+                      : "text-slate-400 hover:text-purple-300"
+                  }`}
+                >
+                  <span>🤖</span>
+                  <span>Bots ({botCount})</span>
+                </button>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by IP, Device, Country, or Bot..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
             </div>
           </div>
 
@@ -669,6 +755,7 @@ export default function AdminDashboard() {
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800/80 uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-3 px-4 font-semibold">Device & Identity</th>
+                  <th className="py-3 px-4 font-semibold">Traffic Type</th>
                   <th className="py-3 px-4 font-semibold">Current IP & Network History</th>
                   <th className="py-3 px-4 font-semibold">Browser & OS</th>
                   <th className="py-3 px-4 font-semibold">Location</th>
@@ -680,7 +767,7 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
                 {filteredVisitors.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                    <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
                       {loading
                         ? "Loading visitor data..."
                         : searchQuery
@@ -720,6 +807,30 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                           </div>
+                        </td>
+
+                        {/* Traffic Type Badge */}
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const cls = classifyVisitor(v);
+                            return (
+                              <div className="flex flex-col gap-0.5 items-start">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls.badgeClass}`}
+                                  title={cls.reason}
+                                >
+                                  <span>{cls.icon}</span>
+                                  <span>{cls.label}</span>
+                                </span>
+                                <span
+                                  className="text-[9px] text-slate-500 max-w-[120px] truncate"
+                                  title={cls.reason}
+                                >
+                                  {cls.reason}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Current IP & History */}

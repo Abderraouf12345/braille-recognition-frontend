@@ -137,3 +137,156 @@ export function detectOS(ua: string): string {
 
   return "Unknown OS";
 }
+
+export type VisitorType = "human" | "cloud_bot" | "scanner" | "crawler";
+
+export interface VisitorClassification {
+  type: VisitorType;
+  isHuman: boolean;
+  label: string;
+  badgeClass: string;
+  icon: string;
+  reason: string;
+}
+
+/**
+ * Checks if an IP falls into known cloud datacenter / hosting ranges.
+ */
+function isDatacenterIp(ip: string): { isDc: boolean; provider?: string } {
+  if (!ip) return { isDc: false };
+
+  // AWS EC2 IP ranges (common blocks)
+  if (
+    /^(13\.(5[2-9]|6[0-9]|11[0-9]|12[0-9]|20[0-9]|21[0-9]|22[0-9]|24[0-9]))\./.test(ip) ||
+    /^(54\.(1[4-9][0-9]|2[0-4][0-9]))\./.test(ip) ||
+    /^(52\.(0|[1-9][0-9]|1[0-9][0-9]|2[0-1][0-9]|22[0-3]))\./.test(ip) ||
+    /^(3\.(0|[89]|1[0-9]|2[0-7]))\./.test(ip) ||
+    /^(18\.(1[89]|2[0-3][0-9]))\./.test(ip) ||
+    /^(34\.(19[2-9]|2[0-4][0-9]|25[0-5]))\./.test(ip) ||
+    /^(35\.(15[3-9]|1[6-7][0-9]|18[0-3]))\./.test(ip)
+  ) {
+    return { isDc: true, provider: "AWS Cloud" };
+  }
+
+  // Google Cloud (GCP)
+  if (
+    /^(34\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7]))\./.test(ip) ||
+    /^(35\.(18[4-9]|19[0-9]|2[0-3][0-9]|24[0-7]))\./.test(ip)
+  ) {
+    return { isDc: true, provider: "Google Cloud" };
+  }
+
+  // Microsoft Azure
+  if (
+    /^(20\.(3[6-9]|[4-9][0-9]|1[0-8][0-9]|19[0-1]))\./.test(ip) ||
+    /^(40\.(7[4-9]|[8-9][0-9]|1[0-1][0-9]|12[0-5]))\./.test(ip) ||
+    /^(51\.(1[0-4][0-9]|15[0-3]))\./.test(ip)
+  ) {
+    return { isDc: true, provider: "Microsoft Azure" };
+  }
+
+  // DigitalOcean
+  if (
+    /^(138\.68|142\.93|159\.65|159\.89|167\.99|178\.62|188\.166|206\.189)\./.test(ip)
+  ) {
+    return { isDc: true, provider: "DigitalOcean" };
+  }
+
+  // Known scanner/hosting blocks (e.g. TerraTransit/Packethub 185.197.x.x, Censys, Shodan, etc.)
+  if (/^(185\.197\.|198\.235\.|162\.142\.|167\.248\.|74\.120\.)/.test(ip)) {
+    return { isDc: true, provider: "Hosting / Scanner Network" };
+  }
+
+  return { isDc: false };
+}
+
+/**
+ * Classifies a visitor record into Human, Cloud Bot, Scanner, or Search Crawler.
+ */
+export function classifyVisitor(record: {
+  deviceId?: string;
+  ip?: string;
+  userAgent?: string;
+  browser?: string;
+  os?: string;
+}): VisitorClassification {
+  const ua = record.userAgent || "";
+  const ip = record.ip || "";
+  const devId = record.deviceId || "";
+  const os = record.os || "";
+
+  // 1. Explicit search engine or SEO crawler in User-Agent
+  if (/Googlebot|bingbot|DuckDuckBot|Baiduspider|YandexBot|Slurp/i.test(ua)) {
+    return {
+      type: "crawler",
+      isHuman: false,
+      label: "Search Crawler",
+      badgeClass: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+      icon: "🔍",
+      reason: "Verified search engine indexer",
+    };
+  }
+
+  // 2. Generic bot/spider or script tool (curl, python, postman, headless)
+  if (
+    /bot|spider|crawler|playwright|puppeteer|selenium|headless|phantomjs|curl|wget|python|postman|go-http|httpclient/i.test(
+      ua
+    )
+  ) {
+    return {
+      type: "scanner",
+      isHuman: false,
+      label: "Automated Bot",
+      badgeClass: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+      icon: "🤖",
+      reason: "Automated script or scraper tool detected in User-Agent",
+    };
+  }
+
+  // 3. No Client JavaScript Execution (Legacy IP fallback / raw HTTP request)
+  if (!devId || devId.startsWith("legacy_") || devId.toLowerCase().includes("web visitor")) {
+    return {
+      type: "scanner",
+      isHuman: false,
+      label: "HTTP Scanner",
+      badgeClass: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+      icon: "🕷️",
+      reason: "Raw HTTP request without client JavaScript or cookie support",
+    };
+  }
+
+  // 4. Cloud Datacenter check (AWS, GCP, Azure, etc.)
+  const dcInfo = isDatacenterIp(ip);
+  if (dcInfo.isDc) {
+    return {
+      type: "cloud_bot",
+      isHuman: false,
+      label: `${dcInfo.provider || "Cloud"} Probe`,
+      badgeClass: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+      icon: "☁️",
+      reason: `Automated traffic originating from ${dcInfo.provider || "cloud datacenter"}`,
+    };
+  }
+
+  // 5. Headless Linux Chrome check (automated worker instance)
+  if (/Linux/i.test(os) && /Chrome\/1[4-9][0-9]/i.test(ua)) {
+    return {
+      type: "cloud_bot",
+      isHuman: false,
+      label: "Cloud Probe",
+      badgeClass: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+      icon: "☁️",
+      reason: "Automated Linux Chromium worker instance",
+    };
+  }
+
+  // 6. Authentic human visitor
+  return {
+    type: "human",
+    isHuman: true,
+    label: "Real Visitor",
+    badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    icon: "👤",
+    reason: "Residential/Mobile ISP with interactive browser sandbox",
+  };
+}
