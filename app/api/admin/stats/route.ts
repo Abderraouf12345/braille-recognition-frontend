@@ -93,7 +93,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       connected: true,
-      totalUniqueDevices: totalUniqueDevices > 0 ? totalUniqueDevices : totalUniqueIps,
+      totalUniqueDevices: Math.max(totalUniqueDevices, visitors.length),
       totalUniqueVisitors: totalUniqueIps,
       totalVisits,
       countryUniqueVisitors: countryUnique || {},
