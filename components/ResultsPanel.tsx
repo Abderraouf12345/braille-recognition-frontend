@@ -181,6 +181,20 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
     link.download = `braille_result_${activeTab}.txt`;
     link.click();
     URL.revokeObjectURL(url);
+    // Track download action
+    trackClientAction("download_results");
+  };
+
+  const handleCopyText = async () => {
+    const content = activeTab === "braille" ? formattedBraille : arabic;
+    if (!content.trim()) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      // Track copy action
+      trackClientAction("copy_text");
+    } catch (err) {
+      console.warn("Copy failed:", err);
+    }
   };
 
   const currentContent = activeTab === "braille" ? formattedBraille : arabic;
@@ -253,12 +267,21 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
           </button>
 
           <button
+            onClick={handleCopyText}
+            disabled={!currentContent}
+            className="flex items-center justify-center space-x-2 bg-slate-700 hover:bg-slate-600 disabled:bg-gray-700 disabled:text-gray-500 text-white py-3 px-4 rounded-xl transition-all font-medium"
+            title="Copy text to clipboard"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          </button>
+
+          <button
             onClick={handleDownload}
             disabled={!braille}
-            className="flex-1 flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white py-3 rounded-xl transition-all font-medium"
+            className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white py-3 px-4 rounded-xl transition-all font-medium"
+            title="Download as text file"
           >
             <Download className="w-5 h-5" />
-            <span>Download</span>
           </button>
         </div>
 

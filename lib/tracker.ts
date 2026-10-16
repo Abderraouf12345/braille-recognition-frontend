@@ -192,11 +192,15 @@ export async function recordUserAction(
     // 2. Mark this device as active in action devices set
     pipeline.sadd("active_action_devices", deviceId);
 
-    // 3. Increment per-device action counter & timestamp
+    // 3. Increment per-device action counters (snake_case matches admin dashboard reading)
     if (action === "extraction") {
       pipeline.hincrby(deviceKey, "extractions", 1);
     } else if (action === "tts_play") {
-      pipeline.hincrby(deviceKey, "ttsPlays", 1);
+      pipeline.hincrby(deviceKey, "tts_plays", 1);
+    } else if (action === "copy_text") {
+      pipeline.hincrby(deviceKey, "copy_count", 1);
+    } else if (action === "download_results") {
+      pipeline.hincrby(deviceKey, "downloads", 1);
     }
 
     pipeline.hset(deviceKey, {
