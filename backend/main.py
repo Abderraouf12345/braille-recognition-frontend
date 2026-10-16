@@ -312,16 +312,32 @@ async def generate_tts(request: TTSRequest):
         clean_text = request.text.replace('"', '').replace('\n', ' ')
         
         temp_dir = tempfile.gettempdir()
-        output_file = os.path.join(temp_dir, f"speech_output_{hash(request.text)}.mp3")
+        file_hash = abs(hash(request.text))
+        output_file = os.path.join(temp_dir, f"speech_output_{file_hash}.mp3")
         
         if os.path.exists(output_file):
             try: os.remove(output_file)
             except: pass
             
-        communicate = edge_tts.Communicate(clean_text, request.voice)
-        await communicate.save(output_file)
+        try:
+            communicate = edge_tts.Communicate(clean_text, request.voice)
+            await communicate.save(output_file)
+        except Exception as edge_err:
+            print(f">>> [TTS] edge-tts error: {edge_err}. Attempting gTTS fallback...", flush=True)
+            try:
+                from gtts import gTTS
+                voice_lower = (request.voice or "").lower()
+                lang_code = "ar"
+                if "fr" in voice_lower: lang_code = "fr"
+                elif "en" in voice_lower: lang_code = "en"
+                elif "ru" in voice_lower: lang_code = "ru"
+                elif "zh" in voice_lower: lang_code = "zh-CN"
+                tts = gTTS(text=clean_text, lang=lang_code)
+                tts.save(output_file)
+            except Exception as fallback_err:
+                return {"success": False, "error": f"TTS failed: {edge_err}; Fallback: {fallback_err}"}
         
-        if os.path.exists(output_file):
+        if os.path.exists(output_file) and os.path.getsize(output_file) > 100:
             return FileResponse(output_file, media_type="audio/mpeg", filename="speech.mp3")
         else:
             return {"success": False, "error": "Failed to generate audio file"}

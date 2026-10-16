@@ -9,7 +9,8 @@ python-multipart
 numpy
 scipy
 matplotlib
-edge-tts
+edge-tts>=7.3.0
+gTTS
 spaces
 python-dotenv
 Pillow
