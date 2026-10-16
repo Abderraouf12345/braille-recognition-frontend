@@ -37,6 +37,10 @@ interface VisitorRecord {
   userAgent?: string;
   browser?: string;
   os?: string;
+  extractions?: string | number;
+  tts_plays?: string | number;
+  copy_count?: string | number;
+  downloads?: string | number;
 }
 
 interface StatsResponse {
@@ -45,6 +49,9 @@ interface StatsResponse {
   totalUniqueDevices: number;
   totalUniqueVisitors: number;
   totalVisits: number;
+  totalExtractions: number;
+  totalTtsPlays: number;
+  totalActiveDevices: number;
   countryUniqueVisitors: Record<string, string | number>;
   countryTotalVisits: Record<string, string | number>;
   visitors: VisitorRecord[];
@@ -540,7 +547,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* KPI Summary Cards */}
+        {/* KPI Summary Cards — Row 1 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
@@ -609,6 +616,74 @@ export default function AdminDashboard() {
               {sortedCountries.length}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">Worldwide geographic coverage</p>
+          </div>
+        </div>
+
+        {/* KPI Summary Cards — Row 2: Action Tracking */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Total Extractions */}
+          <div className="bg-slate-900/80 border border-amber-500/20 p-5 rounded-2xl relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none" />
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Braille Extractions
+              </span>
+              <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl text-lg leading-none">
+                ⚡
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-amber-300 tracking-tight">
+              {(stats?.totalExtractions ?? 0).toLocaleString()}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">Images processed via Extract button</p>
+          </div>
+
+          {/* Total Audio Plays */}
+          <div className="bg-slate-900/80 border border-indigo-500/20 p-5 rounded-2xl relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Audio Plays
+              </span>
+              <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl text-lg leading-none">
+                🔊
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-indigo-300 tracking-tight">
+              {(stats?.totalTtsPlays ?? 0).toLocaleString()}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">TTS audio translations played</p>
+          </div>
+
+          {/* Engagement Rate */}
+          <div className="bg-slate-900/80 border border-emerald-500/20 p-5 rounded-2xl relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none" />
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Engagement Rate
+              </span>
+              <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl text-lg leading-none">
+                📈
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-emerald-300 tracking-tight">
+              {humanCount > 0
+                ? `${Math.round(((stats?.totalActiveDevices ?? 0) / humanCount) * 100)}%`
+                : "—"}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {stats?.totalActiveDevices ?? 0} of {humanCount} real users performed an action
+            </p>
+            {humanCount > 0 && (
+              <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.min(100, Math.round(((stats?.totalActiveDevices ?? 0) / humanCount) * 100))}%`,
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -756,6 +831,7 @@ export default function AdminDashboard() {
                 <tr>
                   <th className="py-3 px-4 font-semibold">Device & Identity</th>
                   <th className="py-3 px-4 font-semibold">Traffic Type</th>
+                  <th className="py-3 px-4 font-semibold">Activity</th>
                   <th className="py-3 px-4 font-semibold">Current IP & Network History</th>
                   <th className="py-3 px-4 font-semibold">Browser & OS</th>
                   <th className="py-3 px-4 font-semibold">Location</th>
@@ -767,7 +843,7 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
                 {filteredVisitors.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
+                    <td colSpan={9} className="py-8 text-center text-slate-500 text-xs">
                       {loading
                         ? "Loading visitor data..."
                         : searchQuery
@@ -828,6 +904,51 @@ export default function AdminDashboard() {
                                 >
                                   {cls.reason}
                                 </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+
+                        {/* Activity Badge */}
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const extractions = Number(v.extractions) || 0;
+                            const ttsPlays = Number(v.tts_plays) || 0;
+                            const copies = Number(v.copy_count) || 0;
+                            const downloads = Number(v.downloads) || 0;
+                            const totalActions = extractions + ttsPlays + copies + downloads;
+                            const isActive = totalActions > 0;
+                            return (
+                              <div className="flex flex-col gap-1">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                    isActive
+                                      ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                                      : "bg-slate-800/60 text-slate-500 border-slate-700/50"
+                                  }`}
+                                >
+                                  <span>{isActive ? "⚡" : "👁️"}</span>
+                                  <span>{isActive ? "Active User" : "Passive Visitor"}</span>
+                                </span>
+                                {isActive && (
+                                  <div className="flex flex-col gap-0.5 text-[9px] text-slate-400">
+                                    {extractions > 0 && (
+                                      <span>⚡ {extractions} extraction{extractions !== 1 ? "s" : ""}</span>
+                                    )}
+                                    {ttsPlays > 0 && (
+                                      <span>🔊 {ttsPlays} audio play{ttsPlays !== 1 ? "s" : ""}</span>
+                                    )}
+                                    {copies > 0 && (
+                                      <span>📋 {copies} cop{copies !== 1 ? "ies" : "y"}</span>
+                                    )}
+                                    {downloads > 0 && (
+                                      <span>⬇️ {downloads} download{downloads !== 1 ? "s" : ""}</span>
+                                    )}
+                                  </div>
+                                )}
+                                {!isActive && (
+                                  <span className="text-[9px] text-slate-600">Viewed page only · 0 actions</span>
+                                )}
                               </div>
                             );
                           })()}
