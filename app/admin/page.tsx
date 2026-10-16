@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { detectBrowser, detectOS, isMobileUA } from "@/lib/browserDetect";
 import {
   Users,
   Globe,
@@ -34,6 +35,8 @@ interface VisitorRecord {
   lastSeen?: string;
   visits?: string | number;
   userAgent?: string;
+  browser?: string;
+  os?: string;
 }
 
 interface StatsResponse {
@@ -45,6 +48,18 @@ interface StatsResponse {
   countryUniqueVisitors: Record<string, string | number>;
   countryTotalVisits: Record<string, string | number>;
   visitors: VisitorRecord[];
+}
+
+function getBrowserDisplay(v: VisitorRecord): string {
+  if (v.browser && v.browser !== "Unknown") return v.browser;
+  if (v.userAgent && v.userAgent !== "Unknown") return detectBrowser(v.userAgent);
+  return "Unknown";
+}
+
+function getOsDisplay(v: VisitorRecord): string {
+  if (v.os && v.os !== "Unknown") return v.os;
+  if (v.userAgent && v.userAgent !== "Unknown") return detectOS(v.userAgent);
+  return "Unknown";
 }
 
 export default function AdminDashboard() {
@@ -106,6 +121,8 @@ export default function AdminDashboard() {
       "Device ID",
       "Current IP",
       "Previous IPs History",
+      "Browser",
+      "Operating System",
       "Country",
       "City",
       "Region",
@@ -118,6 +135,8 @@ export default function AdminDashboard() {
       `"${v.deviceId || ""}"`,
       `"${v.ip || ""}"`,
       `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
+      `"${getBrowserDisplay(v).replace(/"/g, '""')}"`,
+      `"${getOsDisplay(v).replace(/"/g, '""')}"`,
       `"${v.country || "Unknown"}"`,
       `"${v.city || "Unknown"}"`,
       `"${v.region || ""}"`,
@@ -173,7 +192,9 @@ export default function AdminDashboard() {
         (v.deviceId && v.deviceId.toLowerCase().includes(q)) ||
         (v.previousIps && v.previousIps.toLowerCase().includes(q)) ||
         (v.country && v.country.toLowerCase().includes(q)) ||
-        (v.city && v.city.toLowerCase().includes(q))
+        (v.city && v.city.toLowerCase().includes(q)) ||
+        getBrowserDisplay(v).toLowerCase().includes(q) ||
+        getOsDisplay(v).toLowerCase().includes(q)
     );
   }, [stats?.visitors, searchQuery]);
 
@@ -206,7 +227,7 @@ export default function AdminDashboard() {
 
   const isMobile = (ua?: string) => {
     if (!ua) return false;
-    return /mobile|android|iphone|ipad|phone/i.test(ua);
+    return isMobileUA(ua);
   };
 
   if (!isAuthenticated) {
@@ -477,7 +498,7 @@ export default function AdminDashboard() {
               <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search by IP, Device ID, or City..."
+                placeholder="Search by IP, Device, Browser, OS, or City..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -491,6 +512,7 @@ export default function AdminDashboard() {
                 <tr>
                   <th className="py-3 px-4 font-semibold">Device & Identity</th>
                   <th className="py-3 px-4 font-semibold">Current IP & Network History</th>
+                  <th className="py-3 px-4 font-semibold">Browser & OS</th>
                   <th className="py-3 px-4 font-semibold">Location</th>
                   <th className="py-3 px-4 font-semibold">Visits</th>
                   <th className="py-3 px-4 font-semibold">First Seen</th>
@@ -500,7 +522,7 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
                 {filteredVisitors.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500 text-xs">
+                    <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
                       {loading
                         ? "Loading visitor data..."
                         : searchQuery
@@ -555,6 +577,15 @@ export default function AdminDashboard() {
                                 {prevIps.length} IPs recorded
                               </div>
                             )}
+                          </div>
+                        </td>
+                        {/* Browser & OS */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-sky-300 text-[11px]">
+                              {getBrowserDisplay(v)}
+                            </span>
+                            <span className="text-[10px] text-slate-500">{getOsDisplay(v)}</span>
                           </div>
                         </td>
 

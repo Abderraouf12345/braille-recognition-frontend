@@ -1,4 +1,5 @@
 import { getRedis } from "@/lib/redis";
+import { detectBrowser, detectOS } from "@/lib/browserDetect";
 
 /**
  * Parses cookies from header string
@@ -43,6 +44,8 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
     }
     const region = headers.get("x-vercel-ip-country-region") || "";
     const userAgent = headers.get("user-agent") || "Unknown";
+    const browser = detectBrowser(userAgent);
+    const os = detectOS(userAgent);
 
     const now = new Date().toISOString();
     const timestamp = Date.now();
@@ -79,6 +82,8 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
         lastSeen: now,
         visits: "1",
         userAgent: userAgent.slice(0, 200),
+        browser,
+        os,
       });
 
       await redis.hincrby("country_unique_visitors", country, 1);
