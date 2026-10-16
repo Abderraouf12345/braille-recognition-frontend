@@ -14,11 +14,12 @@ export function VisitorTracker() {
         headers: { "Content-Type": "application/json" },
         keepalive: true,
       })
-        .then(() => {
-          sessionStorage.setItem(sessionKey, "true");
+        .then((res) => {
+          if (res.ok) {
+            sessionStorage.setItem(sessionKey, "true");
+          }
         })
         .catch((err) => {
-          // Silently ignore tracking failures so the user experience is never interrupted
           console.debug("Tracking ping skipped:", err);
         });
     }
