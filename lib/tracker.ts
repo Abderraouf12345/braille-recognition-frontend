@@ -98,6 +98,7 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
         deviceId,
         ip: clientIp, // latest active IP
         previousIps: prevIpsList.join(", "),
+        firstSeen: existing.firstSeen || now,
         lastSeen: now,
         visits: currentVisits + 1,
       };
@@ -119,6 +120,7 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
       country,
       city,
       region,
+      firstSeen: existing?.firstSeen || now,
       lastSeen: now,
       visits: existing?.visits ? parseInt(existing.visits, 10) + 1 : 1,
       userAgent: userAgent.slice(0, 200),
