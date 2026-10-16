@@ -20,6 +20,7 @@ import {
   Smartphone,
   Network,
   History,
+  Trash2,
 } from "lucide-react";
 
 interface VisitorRecord {
@@ -135,6 +136,31 @@ export default function AdminDashboard() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  async function handleResetDatabase() {
+    const confirmed = window.confirm(
+      "Are you sure you want to reset the database?\n\nThis will permanently clear all visitor logs and start fresh with clean test data."
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/reset?key=${encodeURIComponent(adminKey)}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Database successfully reset! Starting fresh.");
+        fetchStats(adminKey);
+      } else {
+        alert(`Error: ${data.error || "Failed to reset database"}`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filteredVisitors = useMemo(() => {
@@ -294,6 +320,15 @@ export default function AdminDashboard() {
             >
               <Download className="w-3.5 h-3.5" />
               Export CSV
+            </button>
+            <button
+              onClick={handleResetDatabase}
+              disabled={loading}
+              className="px-3.5 py-2 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-300 text-xs font-medium rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+              title="Reset all visitor data and start fresh"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Reset Data
             </button>
           </div>
         </div>
