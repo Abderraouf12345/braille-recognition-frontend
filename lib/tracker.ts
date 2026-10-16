@@ -11,6 +11,31 @@ function parseCookie(cookieHeader: string | null, key: string): string | null {
 }
 
 /**
+ * Extracts client IP address from headers
+ */
+export function extractClientIp(headers: Headers): string {
+  const forwarded = headers.get("x-forwarded-for");
+  const realIp = headers.get("x-real-ip");
+  return forwarded ? forwarded.split(",")[0].trim() : realIp || "127.0.0.1";
+}
+
+/**
+ * Extracts device ID from headers or cookies with IP fallback
+ */
+export function extractDeviceId(headers: Headers, deviceIdOverride?: string | null): string {
+  const clientIp = extractClientIp(headers);
+  const cookieHeader = headers.get("cookie");
+  const cookieDeviceId = parseCookie(cookieHeader, "braille_device_id");
+  const headerDeviceId = headers.get("x-device-id");
+  return (
+    deviceIdOverride ||
+    headerDeviceId ||
+    cookieDeviceId ||
+    `legacy_${clientIp}`
+  );
+}
+
+/**
  * Records visitor Device ID, IP address, and Vercel edge geolocation permanently in Upstash Redis.
  * Called on page load and on image recognition/processing requests.
  */
@@ -19,20 +44,9 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
     const redis = getRedis();
     if (!redis) return;
 
-    // 1. Extract real client IP
-    const forwarded = headers.get("x-forwarded-for");
-    const realIp = headers.get("x-real-ip");
-    const clientIp = forwarded ? forwarded.split(",")[0].trim() : realIp || "127.0.0.1";
-
-    // 2. Extract Permanent Device ID (Header > Body Override > Cookie > IP Fallback)
-    const cookieHeader = headers.get("cookie");
-    const cookieDeviceId = parseCookie(cookieHeader, "braille_device_id");
-    const headerDeviceId = headers.get("x-device-id");
-    const deviceId =
-      deviceIdOverride ||
-      headerDeviceId ||
-      cookieDeviceId ||
-      `legacy_${clientIp}`;
+    // 1. Extract real client IP and Device ID
+    const clientIp = extractClientIp(headers);
+    const deviceId = extractDeviceId(headers, deviceIdOverride);
 
     // 3. Extract Vercel Edge Geolocation headers
     const country = headers.get("x-vercel-ip-country") || "Unknown";
@@ -137,3 +151,64 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
     console.error("[Tracker Error]:", error);
   }
 }
+
+export type UserActionType = "extraction" | "tts_play" | "copy_text" | "download_results";
+
+/**
+ * Records a specific high-value user action (e.g. Braille extraction, TTS audio play).
+ */
+export async function recordUserAction(
+  headers: Headers,
+  action: UserActionType,
+  deviceIdOverride?: string | null
+) {
+  try {
+    const redis = getRedis();
+    if (!redis) return;
+
+    const deviceId = extractDeviceId(headers, deviceIdOverride);
+    const deviceKey = `device:${deviceId}`;
+    const now = new Date().toISOString();
+    const timestamp = Date.now();
+
+    const humanLabels: Record<UserActionType, string> = {
+      extraction: "Extract Braille",
+      tts_play: "Listen to Audio",
+      copy_text: "Copy Result",
+      download_results: "Download File",
+    };
+
+    const actionLabel = humanLabels[action] || action;
+
+    const pipeline = redis.pipeline();
+
+    // 1. Increment global metrics
+    if (action === "extraction") {
+      pipeline.incr("total_extractions");
+    } else if (action === "tts_play") {
+      pipeline.incr("total_tts_plays");
+    }
+
+    // 2. Mark this device as active in action devices set
+    pipeline.sadd("active_action_devices", deviceId);
+
+    // 3. Increment per-device action counter & timestamp
+    if (action === "extraction") {
+      pipeline.hincrby(deviceKey, "extractions", 1);
+    } else if (action === "tts_play") {
+      pipeline.hincrby(deviceKey, "ttsPlays", 1);
+    }
+
+    pipeline.hset(deviceKey, {
+      lastAction: actionLabel,
+      lastActionTime: now,
+      lastSeen: now,
+    });
+    pipeline.zadd("devices_by_last_seen", { score: timestamp, member: deviceId });
+
+    await pipeline.exec();
+  } catch (error) {
+    console.error("[RecordUserAction Error]:", error);
+  }
+}
+

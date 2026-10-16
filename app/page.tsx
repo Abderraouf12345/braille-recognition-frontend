@@ -6,6 +6,7 @@ import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
+import { getOrCreateDeviceId } from "@/lib/clientDevice";
 
 export default function Dashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -71,6 +72,9 @@ export default function Dashboard() {
         : "/api";
       const response = await fetch(`${API_URL}/process-stream`, {
         method: "POST",
+        headers: {
+          "x-device-id": getOrCreateDeviceId(),
+        },
         body: formData,
         signal: controller.signal,
       });

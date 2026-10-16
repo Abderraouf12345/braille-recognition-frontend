@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Download, Volume2, Loader2, Play, Pause, FastForward, Rewind, X } from "lucide-react";
 import axios from "axios";
+import { getOrCreateDeviceId, trackClientAction } from "@/lib/clientDevice";
 
 interface ResultsPanelProps {
   braille: string;
@@ -109,6 +110,9 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
         text: content,
         voice: selectedVoice
       }, {
+        headers: {
+          "x-device-id": getOrCreateDeviceId(),
+        },
         responseType: 'blob'
       });
 
