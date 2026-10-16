@@ -45,3 +45,23 @@ export function getOrCreateDeviceId(): string {
 
   return deviceId;
 }
+
+/**
+ * Sends a non-blocking client-side action beacon (e.g. copying text, downloading results).
+ */
+export function trackClientAction(
+  action: "copy_text" | "download_results" | "tts_play" | "extraction"
+) {
+  if (typeof window === "undefined") return;
+  const deviceId = getOrCreateDeviceId();
+  fetch("/api/track", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-device-id": deviceId,
+    },
+    body: JSON.stringify({ deviceId, action }),
+    keepalive: true,
+  }).catch(() => {});
+}
+

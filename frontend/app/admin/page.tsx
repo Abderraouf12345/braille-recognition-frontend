@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { detectBrowser, detectOS, isMobileUA } from "@/lib/browserDetect";
+import { detectBrowser, detectOS, isMobileUA, classifyVisitor } from "@/lib/browserDetect";
 import {
   Users,
   Globe,
@@ -62,6 +62,94 @@ function getOsDisplay(v: VisitorRecord): string {
   return "Unknown";
 }
 
+interface CountryInfo {
+  name: string;
+  flag: string;
+  code: string;
+}
+
+function getCountryDetails(code?: string): CountryInfo {
+  if (!code || code === "Unknown") {
+    return { name: "Unknown Location", flag: "🌐", code: "Unknown" };
+  }
+
+  const cleanCode = code.trim().toUpperCase();
+
+  const manualNames: Record<string, string> = {
+    DZ: "Algeria",
+    TW: "Taiwan",
+    BG: "Bulgaria",
+    US: "United States",
+    FR: "France",
+    GB: "United Kingdom",
+    UK: "United Kingdom",
+    CA: "Canada",
+    DE: "Germany",
+    ES: "Spain",
+    IT: "Italy",
+    EG: "Egypt",
+    SA: "Saudi Arabia",
+    AE: "United Arab Emirates",
+    MA: "Morocco",
+    TN: "Tunisia",
+    QA: "Qatar",
+    KW: "Kuwait",
+    OM: "Oman",
+    JO: "Jordan",
+    LB: "Lebanon",
+    IQ: "Iraq",
+    TR: "Turkey",
+    IN: "India",
+    CN: "China",
+    JP: "Japan",
+    KR: "South Korea",
+    BR: "Brazil",
+    AU: "Australia",
+    RU: "Russia",
+    NL: "Netherlands",
+    SE: "Sweden",
+    CH: "Switzerland",
+    BE: "Belgium",
+    AT: "Austria",
+    PL: "Poland",
+    SG: "Singapore",
+    MY: "Malaysia",
+    ID: "Indonesia",
+    PS: "Palestine",
+    SY: "Syria",
+    YE: "Yemen",
+    SD: "Sudan",
+    LY: "Libya",
+    BH: "Bahrain",
+    MR: "Mauritania",
+    SO: "Somalia",
+  };
+
+  let name = manualNames[cleanCode];
+
+  if (!name && typeof Intl !== "undefined" && typeof Intl.DisplayNames === "function") {
+    try {
+      const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+      name = regionNames.of(cleanCode) || cleanCode;
+    } catch {
+      name = cleanCode;
+    }
+  }
+
+  name = name || cleanCode;
+
+  let flag = "🌐";
+  if (/^[A-Z]{2}$/.test(cleanCode)) {
+    try {
+      flag = String.fromCodePoint(...cleanCode.split("").map((c) => 127397 + c.charCodeAt(0)));
+    } catch {
+      flag = "🌐";
+    }
+  }
+
+  return { name, flag, code: cleanCode };
+}
+
 export default function AdminDashboard() {
   const [adminKey, setAdminKey] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -69,6 +157,7 @@ export default function AdminDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [trafficFilter, setTrafficFilter] = useState<"all" | "humans" | "bots">("all");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -119,11 +208,14 @@ export default function AdminDashboard() {
 
     const headers = [
       "Device ID",
+      "Traffic Classification",
+      "Is Real Human",
       "Current IP",
       "Previous IPs History",
       "Browser",
       "Operating System",
-      "Country",
+      "Country Name",
+      "Country Code",
       "City",
       "Region",
       "Visits",
@@ -131,20 +223,27 @@ export default function AdminDashboard() {
       "Last Seen",
       "User Agent",
     ];
-    const rows = stats.visitors.map((v) => [
-      `"${v.deviceId || ""}"`,
-      `"${v.ip || ""}"`,
-      `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
-      `"${getBrowserDisplay(v).replace(/"/g, '""')}"`,
-      `"${getOsDisplay(v).replace(/"/g, '""')}"`,
-      `"${v.country || "Unknown"}"`,
-      `"${v.city || "Unknown"}"`,
-      `"${v.region || ""}"`,
-      `"${v.visits || 1}"`,
-      `"${v.firstSeen || ""}"`,
-      `"${v.lastSeen || ""}"`,
-      `"${(v.userAgent || "").replace(/"/g, '""')}"`,
-    ]);
+    const rows = stats.visitors.map((v) => {
+      const cDetails = getCountryDetails(v.country);
+      const cls = classifyVisitor(v);
+      return [
+        `"${v.deviceId || ""}"`,
+        `"${cls.label.replace(/"/g, '""')}"`,
+        `"${cls.isHuman ? "Yes" : "No"}"`,
+        `"${v.ip || ""}"`,
+        `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
+        `"${getBrowserDisplay(v).replace(/"/g, '""')}"`,
+        `"${getOsDisplay(v).replace(/"/g, '""')}"`,
+        `"${cDetails.name.replace(/"/g, '""')}"`,
+        `"${(v.country || "Unknown").replace(/"/g, '""')}"`,
+        `"${(v.city || "Unknown").replace(/"/g, '""')}"`,
+        `"${(v.region || "").replace(/"/g, '""')}"`,
+        `"${v.visits || 1}"`,
+        `"${v.firstSeen || ""}"`,
+        `"${v.lastSeen || ""}"`,
+        `"${(v.userAgent || "").replace(/"/g, '""')}"`,
+      ];
+    });
 
     const csvContent =
       "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -182,23 +281,75 @@ export default function AdminDashboard() {
     }
   }
 
+  const { humanCount, botCount } = useMemo(() => {
+    if (!stats?.visitors) return { humanCount: 0, botCount: 0 };
+    let humans = 0;
+    let bots = 0;
+    for (const v of stats.visitors) {
+      const cls = classifyVisitor(v);
+      if (cls.isHuman) humans++;
+      else bots++;
+    }
+    return { humanCount: humans, botCount: bots };
+  }, [stats?.visitors]);
+
   const filteredVisitors = useMemo(() => {
     if (!stats?.visitors) return [];
-    if (!searchQuery.trim()) return stats.visitors;
+    let list = stats.visitors;
+
+    if (trafficFilter === "humans") {
+      list = list.filter((v) => classifyVisitor(v).isHuman);
+    } else if (trafficFilter === "bots") {
+      list = list.filter((v) => !classifyVisitor(v).isHuman);
+    }
+
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase().trim();
-    return stats.visitors.filter(
-      (v) =>
+    return list.filter((v) => {
+      const cDetails = getCountryDetails(v.country);
+      const cls = classifyVisitor(v);
+      return (
         (v.ip && v.ip.toLowerCase().includes(q)) ||
         (v.deviceId && v.deviceId.toLowerCase().includes(q)) ||
         (v.previousIps && v.previousIps.toLowerCase().includes(q)) ||
         (v.country && v.country.toLowerCase().includes(q)) ||
+        cDetails.name.toLowerCase().includes(q) ||
         (v.city && v.city.toLowerCase().includes(q)) ||
         getBrowserDisplay(v).toLowerCase().includes(q) ||
-        getOsDisplay(v).toLowerCase().includes(q)
-    );
-  }, [stats?.visitors, searchQuery]);
+        getOsDisplay(v).toLowerCase().includes(q) ||
+        cls.label.toLowerCase().includes(q) ||
+        cls.reason.toLowerCase().includes(q)
+      );
+    });
+  }, [stats?.visitors, trafficFilter, searchQuery]);
 
   const sortedCountries = useMemo(() => {
+    if (stats?.visitors && stats.visitors.length > 0) {
+      const counts: Record<string, { count: number; totalVisits: number }> = {};
+      const sourceList =
+        trafficFilter === "bots"
+          ? stats.visitors.filter((v) => !classifyVisitor(v).isHuman)
+          : trafficFilter === "humans"
+          ? stats.visitors.filter((v) => classifyVisitor(v).isHuman)
+          : stats.visitors;
+
+      for (const v of sourceList) {
+        const c = v.country && v.country !== "Unknown" ? v.country : "Unknown";
+        if (!counts[c]) {
+          counts[c] = { count: 0, totalVisits: 0 };
+        }
+        counts[c].count += 1;
+        counts[c].totalVisits += Number(v.visits) || 1;
+      }
+      return Object.entries(counts)
+        .map(([country, data]) => ({
+          country,
+          count: data.count,
+          totalVisits: data.totalVisits,
+        }))
+        .sort((a, b) => b.count - a.count);
+    }
+
     if (!stats?.countryUniqueVisitors) return [];
     return Object.entries(stats.countryUniqueVisitors)
       .map(([country, count]) => ({
@@ -207,7 +358,11 @@ export default function AdminDashboard() {
         totalVisits: Number(stats.countryTotalVisits?.[country]) || Number(count),
       }))
       .sort((a, b) => b.count - a.count);
-  }, [stats?.countryUniqueVisitors, stats?.countryTotalVisits]);
+  }, [stats?.visitors, stats?.countryUniqueVisitors, stats?.countryTotalVisits, trafficFilter]);
+
+  const totalCountryUsers = useMemo(() => {
+    return sortedCountries.reduce((sum, item) => sum + item.count, 0) || 1;
+  }, [sortedCountries]);
 
   const formatDate = (isoStr?: string) => {
     if (!isoStr) return "—";
@@ -252,7 +407,7 @@ export default function AdminDashboard() {
               </label>
               <input
                 type="password"
-                placeholder="Enter admin key (default: braille2026)"
+                placeholder="Enter admin passcode..."
                 value={adminKey}
                 onChange={(e) => setAdminKey(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -390,16 +545,25 @@ export default function AdminDashboard() {
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                True Unique Users
+                Real Human Users
               </span>
-              <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">
+              <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
                 <Users className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-3xl font-extrabold text-white tracking-tight">
-              {stats?.totalUniqueDevices.toLocaleString() || 0}
+            <div className="text-3xl font-extrabold text-white tracking-tight flex items-baseline gap-2">
+              <span>{humanCount.toLocaleString()}</span>
+              {botCount > 0 && (
+                <span className="text-xs font-semibold text-purple-400 px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20">
+                  +{botCount} bots
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Physical devices (immune to router restarts)</p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {botCount > 0
+                ? `${botCount} cloud probes & scanners isolated`
+                : "Genuine physical user devices"}
+            </p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
@@ -451,28 +615,65 @@ export default function AdminDashboard() {
         {/* Geolocation Top Countries Breakdown */}
         {sortedCountries.length > 0 && (
           <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-sky-400" />
-              Top Visiting Countries
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="flex items-center justify-between mb-3.5">
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-sky-400" />
+                Top Visiting Countries
+              </h2>
+              <span className="text-[11px] text-slate-400">
+                Total classified users: <strong className="text-slate-200">{totalCountryUsers}</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {sortedCountries.slice(0, 12).map((item) => {
-                const total = stats?.totalUniqueDevices || 1;
-                const pct = Math.round((item.count / total) * 100);
+                const cDetails = getCountryDetails(item.country);
+                const rawPct = (item.count / totalCountryUsers) * 100;
+                const pctDisplay = rawPct % 1 === 0 ? rawPct.toFixed(0) : rawPct.toFixed(1);
+
                 return (
                   <div
                     key={item.country}
-                    className="p-3 bg-slate-950/60 border border-slate-800/60 rounded-xl flex flex-col justify-between"
+                    className="p-3.5 bg-slate-950/70 border border-slate-800/70 hover:border-slate-700/80 rounded-xl flex flex-col justify-between transition-colors shadow-sm"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-200 tracking-wide">
-                        {item.country}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">{pct}%</span>
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xl shrink-0" role="img" aria-label={cDetails.name}>
+                            {cDetails.flag}
+                          </span>
+                          <span
+                            className="text-xs font-bold text-slate-100 truncate tracking-wide"
+                            title={`${cDetails.name} (${cDetails.code})`}
+                          >
+                            {cDetails.name}
+                          </span>
+                        </div>
+                        {cDetails.code !== "Unknown" && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-semibold shrink-0">
+                            {cDetails.code}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Visual Percentage Progress Bar */}
+                      <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden my-2 border border-slate-800/60">
+                        <div
+                          className="bg-gradient-to-r from-sky-500 to-indigo-500 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(5, Math.min(100, rawPct))}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="mt-2 flex items-baseline justify-between text-xs">
-                      <span className="text-slate-400 text-[11px]">{item.count} users</span>
-                      <span className="text-slate-500 text-[10px]">{item.totalVisits} views</span>
+
+                    <div className="mt-1 flex items-baseline justify-between text-xs">
+                      <span className="text-slate-400 text-[11px]">
+                        <strong className="text-slate-200">{item.count}</strong> {item.count === 1 ? "user" : "users"}
+                        <span className="text-slate-600 mx-1.5">·</span>
+                        <span className="text-slate-400">{item.totalVisits} views</span>
+                      </span>
+                      <span className="text-xs font-bold text-sky-400 font-mono">
+                        {pctDisplay}%
+                      </span>
                     </div>
                   </div>
                 );
@@ -483,7 +684,7 @@ export default function AdminDashboard() {
 
         {/* Detailed Visitors Table */}
         <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden">
-          <div className="p-4 md:p-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="p-4 md:p-5 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Users className="w-4 h-4 text-indigo-400" />
@@ -491,18 +692,61 @@ export default function AdminDashboard() {
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Showing {filteredVisitors.length} of {stats?.visitors?.length || 0} recorded visitors
+                {trafficFilter === "humans" && " (Real humans only)"}
+                {trafficFilter === "bots" && " (Bots & scanners only)"}
               </p>
             </div>
 
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search by IP, Device, Browser, OS, or City..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Traffic Filter Tabs */}
+              <div className="flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTrafficFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    trafficFilter === "all"
+                      ? "bg-slate-800 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  All ({stats?.visitors?.length || 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrafficFilter("humans")}
+                  className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1 transition-colors ${
+                    trafficFilter === "humans"
+                      ? "bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                      : "text-slate-400 hover:text-emerald-300"
+                  }`}
+                >
+                  <span>👤</span>
+                  <span>Humans ({humanCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrafficFilter("bots")}
+                  className={`px-2.5 py-1 rounded-lg font-medium flex items-center gap-1 transition-colors ${
+                    trafficFilter === "bots"
+                      ? "bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-sm"
+                      : "text-slate-400 hover:text-purple-300"
+                  }`}
+                >
+                  <span>🤖</span>
+                  <span>Bots ({botCount})</span>
+                </button>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by IP, Device, Country, or Bot..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
             </div>
           </div>
 
@@ -511,6 +755,7 @@ export default function AdminDashboard() {
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800/80 uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-3 px-4 font-semibold">Device & Identity</th>
+                  <th className="py-3 px-4 font-semibold">Traffic Type</th>
                   <th className="py-3 px-4 font-semibold">Current IP & Network History</th>
                   <th className="py-3 px-4 font-semibold">Browser & OS</th>
                   <th className="py-3 px-4 font-semibold">Location</th>
@@ -522,7 +767,7 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
                 {filteredVisitors.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                    <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
                       {loading
                         ? "Loading visitor data..."
                         : searchQuery
@@ -564,6 +809,30 @@ export default function AdminDashboard() {
                           </div>
                         </td>
 
+                        {/* Traffic Type Badge */}
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const cls = classifyVisitor(v);
+                            return (
+                              <div className="flex flex-col gap-0.5 items-start">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls.badgeClass}`}
+                                  title={cls.reason}
+                                >
+                                  <span>{cls.icon}</span>
+                                  <span>{cls.label}</span>
+                                </span>
+                                <span
+                                  className="text-[9px] text-slate-500 max-w-[120px] truncate"
+                                  title={cls.reason}
+                                >
+                                  {cls.reason}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+
                         {/* Current IP & History */}
                         <td className="py-3 px-4 font-mono">
                           <div className="flex flex-col gap-1">
@@ -591,18 +860,38 @@ export default function AdminDashboard() {
 
                         {/* Location */}
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-1.5 font-medium text-slate-200">
-                            <MapPin className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                            <span>
-                              {v.country || "Unknown"}
-                              {v.city && v.city !== "Unknown" ? `, ${v.city}` : ""}
-                            </span>
-                          </div>
-                          {v.region && (
-                            <div className="text-[10px] text-slate-500 ml-5 font-mono">
-                              Region: {v.region}
-                            </div>
-                          )}
+                          {(() => {
+                            const cDetails = getCountryDetails(v.country);
+                            return (
+                              <div className="flex items-start gap-2">
+                                <span className="text-base shrink-0 mt-0.5" role="img" aria-label={cDetails.name}>
+                                  {cDetails.flag}
+                                </span>
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-slate-100 text-xs">
+                                      {cDetails.name}
+                                    </span>
+                                    {cDetails.code !== "Unknown" && (
+                                      <span className="text-[10px] text-slate-500 font-mono">
+                                        ({cDetails.code})
+                                      </span>
+                                    )}
+                                  </div>
+                                  {v.city && v.city !== "Unknown" ? (
+                                    <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                      <MapPin className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+                                      {v.city}{v.region ? `, Region ${v.region}` : ""}
+                                    </span>
+                                  ) : v.region ? (
+                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                      Region: {v.region}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Visits */}

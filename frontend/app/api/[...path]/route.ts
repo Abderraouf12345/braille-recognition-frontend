@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { recordVisitor } from "@/lib/tracker";
+import { recordVisitor, recordUserAction } from "@/lib/tracker";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // Allow up to 60s for AI inference on Vercel
@@ -25,6 +25,13 @@ async function proxyHandler(
 
     const targetPath = path.join("/");
     const targetUrl = `${backendBase}/${targetPath}${request.nextUrl.search}`;
+
+    // Record high-value user actions (non-blocking)
+    if (targetPath.includes("process-stream")) {
+      recordUserAction(request.headers, "extraction").catch(() => {});
+    } else if (targetPath.includes("tts")) {
+      recordUserAction(request.headers, "tts_play").catch(() => {});
+    }
 
     // Prepare headers for the target backend
     const forwardHeaders = new Headers();

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Download, Volume2, Loader2, Play, Pause, FastForward, Rewind, X } from "lucide-react";
 import axios from "axios";
+import { getOrCreateDeviceId, trackClientAction } from "@/lib/clientDevice";
 
 interface ResultsPanelProps {
   braille: string;
@@ -79,6 +80,20 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
     }
   }, [selectedLang, voicesByLang]);
 
+  useEffect(() => {
+    if (!braille && !arabic) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setShowPlayer(false);
+      setIsPlaying(false);
+      if (audioUrl) {
+        window.URL.revokeObjectURL(audioUrl);
+        setAudioUrl(null);
+      }
+    }
+  }, [braille, arabic]);
+
   const handlePlayAudio = async () => {
     let content = "";
     if (activeTab === "braille") content = formattedBraille;
@@ -95,8 +110,27 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
         text: content,
         voice: selectedVoice
       }, {
+        headers: {
+          "x-device-id": getOrCreateDeviceId(),
+        },
         responseType: 'blob'
       });
+
+      // Guard: Detect if the server returned a JSON error disguised as a blob
+      const contentType = String(response.headers['content-type'] || '');
+      if (contentType.includes('application/json') || response.data.size < 600) {
+        const text = await response.data.text();
+        try {
+          const json = JSON.parse(text);
+          if (!json.success || json.error) {
+            throw new Error(json.error || "Server TTS error");
+          }
+        } catch (parseErr: any) {
+          if (text.includes("403") || text.includes("error")) {
+            throw new Error(text);
+          }
+        }
+      }
 
       const url = window.URL.createObjectURL(new Blob([response.data], { type: "audio/mpeg" }));
 
@@ -113,8 +147,23 @@ export default function ResultsPanel({ braille, arabic, language = "arabic" }: R
         audioRef.current.play().catch(e => console.error("Auto-play failed:", e));
         setIsPlaying(true);
       }
-    } catch (err) {
-      console.error("Failed to generate TTS:", err);
+    } catch (err: any) {
+      console.warn("Server TTS unavailable, falling back to browser SpeechSynthesis:", err);
+      // Instant Fallback: Browser Native Text-To-Speech (Web Speech API)
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(content);
+        const langMap: Record<string, string> = {
+          "Arabic": "ar-SA",
+          "French": "fr-FR",
+          "English": "en-US",
+          "Russian": "ru-RU",
+          "Chinese": "zh-CN",
+        };
+        utterance.lang = langMap[selectedLang] || "ar-SA";
+        utterance.rate = 0.95;
+        window.speechSynthesis.speak(utterance);
+      }
     } finally {
       setIsTtsLoading(false);
     }

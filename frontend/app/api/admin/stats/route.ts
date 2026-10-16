@@ -31,6 +31,9 @@ export async function GET(request: Request) {
       totalUniqueDevicesRaw,
       totalUniqueIpsRaw,
       totalVisitsRaw,
+      totalExtractionsRaw,
+      totalTtsPlaysRaw,
+      activeActionDevicesRaw,
       countryUnique,
       countryTotal,
       recentDeviceIds,
@@ -39,6 +42,9 @@ export async function GET(request: Request) {
       redis.scard("all_unique_devices"),
       redis.scard("all_unique_ips"),
       redis.get<string | number>("total_page_visits"),
+      redis.get<string | number>("total_extractions"),
+      redis.get<string | number>("total_tts_plays"),
+      redis.scard("active_action_devices"),
       redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
       redis.hgetall<Record<string, number | string>>("country_total_visits"),
       redis.zrange<string[]>("devices_by_last_seen", 0, 99, { rev: true }),
@@ -48,6 +54,9 @@ export async function GET(request: Request) {
     const totalUniqueDevices = Number(totalUniqueDevicesRaw) || 0;
     const totalUniqueIps = Number(totalUniqueIpsRaw) || 0;
     const totalVisits = Number(totalVisitsRaw) || 0;
+    const totalExtractions = Number(totalExtractionsRaw) || 0;
+    const totalTtsPlays = Number(totalTtsPlaysRaw) || 0;
+    const totalActiveDevices = Number(activeActionDevicesRaw) || 0;
 
     // Fetch device records
     const visitorsMap = new Map<string, any>();
@@ -96,6 +105,9 @@ export async function GET(request: Request) {
       totalUniqueDevices: Math.max(totalUniqueDevices, visitors.length),
       totalUniqueVisitors: totalUniqueIps,
       totalVisits,
+      totalExtractions,
+      totalTtsPlays,
+      totalActiveDevices,
       countryUniqueVisitors: countryUnique || {},
       countryTotalVisits: countryTotal || {},
       visitors,

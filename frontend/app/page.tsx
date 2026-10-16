@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Info, X, Mail } from "lucide-react";
+import { useState, useRef } from "react";
+import { Info, X, Mail, Loader2, RotateCcw } from "lucide-react";
 import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
-import { Loader2 } from "lucide-react";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
+import { getOrCreateDeviceId } from "@/lib/clientDevice";
 
 export default function Dashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -22,6 +22,24 @@ export default function Dashboard() {
   });
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Four-corner selection fits screen; Result overlay allows full-page scrolling
+  const isCornerSelectionMode = Boolean(imageFile && !overlayImage);
+
+  const handleReset = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    setImageFile(null);
+    setCorners([]);
+    setLightAngle(0);
+    setResults({ braille: "", arabic: "" });
+    setOverlayImage(null);
+    setError(null);
+  };
 
   const handleProcess = async () => {
     if (!imageFile || corners.length !== 4) return;
@@ -45,13 +63,20 @@ export default function Dashboard() {
     formData.append("lightAngle", lightAngle.toString());
     formData.append("language", language);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("hf.space")
         ? process.env.NEXT_PUBLIC_API_URL
         : "/api";
       const response = await fetch(`${API_URL}/process-stream`, {
         method: "POST",
+        headers: {
+          "x-device-id": getOrCreateDeviceId(),
+        },
         body: formData,
+        signal: controller.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -95,33 +120,52 @@ export default function Dashboard() {
         }
       }
     } catch (err: any) {
+      if (err.name === "AbortError") return;
       setError(err.message || "Failed to connect to the processing server.");
       setIsProcessing(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 flex flex-col font-sans selection:bg-blue-500/30">
-      <header className="mb-8 flex items-start justify-between gap-4">
+    <div className={`min-h-screen bg-gray-950 text-gray-100 p-4 sm:p-5 lg:p-6 flex flex-col font-sans selection:bg-blue-500/30 ${
+      isCornerSelectionMode ? "lg:h-screen lg:max-h-screen lg:overflow-hidden" : ""
+    }`}>
+      <header className="mb-4 flex items-start justify-between gap-4 shrink-0">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             Braille Recognition
           </h1>
-          <p className="text-gray-500 mt-2">Advanced structural analysis &amp; multi-language translation</p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">AI-powered Braille recognition &amp; multi-language translation</p>
         </div>
-        <button
-          onClick={() => setShowAbout(true)}
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0 mt-1"
-        >
-          <Info className="w-4 h-4" />
-          About
-        </button>
+        <div className="flex items-center gap-2">
+          {imageFile && (
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-red-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0"
+              title="Clear image and start over"
+            >
+              <RotateCcw className="w-4 h-4" />
+              New Image
+            </button>
+          )}
+          <button
+            onClick={() => setShowAbout(true)}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0"
+          >
+            <Info className="w-4 h-4" />
+            About
+          </button>
+        </div>
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
+      <div className={`flex-1 flex flex-col lg:flex-row gap-6 min-h-0 ${
+        isCornerSelectionMode ? "lg:overflow-hidden" : ""
+      }`}>
         
         {/* Left Side: Workspace */}
-        <div className="flex-1 flex flex-col min-h-[500px] lg:min-h-0 relative">
+        <div className={`flex-1 flex flex-col relative ${
+          isCornerSelectionMode ? "min-h-[420px] lg:min-h-0 h-full" : "min-h-[500px]"
+        }`}>
           <ImageWorkspace 
             imageFile={imageFile} 
             setImageFile={(file) => {
@@ -137,16 +181,18 @@ export default function Dashboard() {
         </div>
 
         {/* Right Side: Controls & Results */}
-        <div className="w-full lg:w-[450px] xl:w-[500px] flex flex-col shrink-0 overflow-y-auto pr-2 custom-scrollbar">
+        <div className={`w-full lg:w-[420px] xl:w-[460px] flex flex-col gap-2.5 sm:gap-3 lg:gap-[1.5vh] shrink-0 pr-1 lg:pr-2 custom-scrollbar ${
+          isCornerSelectionMode ? "lg:h-full lg:overflow-y-auto" : ""
+        }`}>
           
           <LightDial angle={lightAngle} setAngle={setLightAngle} />
           
-          <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700 shadow-xl mt-6">
-            <h3 className="text-gray-400 text-sm font-medium mb-3">Translation Language</h3>
+          <div className="bg-gray-800 p-3 sm:p-4 lg:p-[1.5vh] rounded-2xl border border-gray-700 shadow-xl shrink-0">
+            <h3 className="text-gray-400 text-xs sm:text-sm font-medium mb-2 sm:mb-2.5 lg:mb-[1vh]">Translation Language</h3>
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 outline-none"
+              className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-xs sm:text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 sm:p-3 lg:p-[1.2vh] outline-none"
             >
               <option value="arabic">Arabic — عربي</option>
               <option value="french">French — Français</option>
@@ -159,11 +205,11 @@ export default function Dashboard() {
             </select>
           </div>
           
-          <div className="mt-6">
+          <div className="shrink-0">
             <button 
               onClick={handleProcess}
               disabled={!imageFile || isProcessing || corners.length !== 4}
-              className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-lg flex items-center justify-center space-x-3"
+              className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 sm:py-3 lg:py-[1.4vh] rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-sm sm:text-base lg:text-lg flex items-center justify-center space-x-3"
             >
               {isProcessing ? (
                 <>
@@ -175,7 +221,7 @@ export default function Dashboard() {
               )}
             </button>
             {error && (
-              <p className="text-red-400 text-sm mt-3 bg-red-900/20 p-3 rounded-lg border border-red-800">
+              <p className="text-red-400 text-sm mt-2 bg-red-900/20 p-2.5 rounded-lg border border-red-800">
                 {error}
               </p>
             )}
@@ -191,15 +237,25 @@ export default function Dashboard() {
       </div>
 
       {/* ── Footer ── */}
-      <footer className="mt-8 pt-6 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+      <footer className="mt-3 pt-3 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-600 shrink-0">
         <span>© {new Date().getFullYear()} Braille Recognition — All rights reserved.</span>
-        <a
-          href="mailto:abderraouf.benmohieddine@g.enp.edu.dz"
-          className="flex items-center gap-1.5 text-gray-500 hover:text-blue-400 transition-colors"
-        >
-          <Mail className="w-3.5 h-3.5" />
-          abderraouf.benmohieddine@g.enp.edu.dz
-        </a>
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <a
+            href="mailto:abderraouf.benmohieddine@g.enp.edu.dz"
+            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-400 transition-colors"
+          >
+            <Mail className="w-3.5 h-3.5" />
+            abderraouf.benmohieddine@g.enp.edu.dz
+          </a>
+          <span className="text-gray-700 hidden sm:inline">·</span>
+          <a
+            href="mailto:abderraouf.amellal@g.enp.edu.dz"
+            className="flex items-center gap-1.5 text-gray-500 hover:text-blue-400 transition-colors"
+          >
+            <Mail className="w-3.5 h-3.5" />
+            abderraouf.amellal@g.enp.edu.dz
+          </a>
+        </div>
       </footer>
 
       {/* ── About / How-It-Works Modal ── */}
@@ -285,6 +341,13 @@ export default function Dashboard() {
               >
                 <Mail className="w-4 h-4" />
                 abderraouf.benmohieddine@g.enp.edu.dz
+              </a>
+              <a
+                href="mailto:abderraouf.amellal@g.enp.edu.dz"
+                className="flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors text-sm mt-2"
+              >
+                <Mail className="w-4 h-4" />
+                abderraouf.amellal@g.enp.edu.dz
               </a>
             </div>
           </div>
