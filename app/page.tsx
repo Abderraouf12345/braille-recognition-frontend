@@ -339,17 +339,6 @@ export default function Dashboard() {
                   </li>
                 ))}
               </ol>
-
-              {/* Note about Light Direction */}
-              <div className="mt-4 p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/30 text-xs text-gray-300 space-y-1">
-                <div className="flex items-center gap-1.5 text-blue-400 font-semibold">
-                  <span>💡</span>
-                  <span>How Light Direction Works (Recto vs. Verso)</span>
-                </div>
-                <p className="text-gray-400 text-[11px] leading-relaxed">
-                  In double-sided Braille, raised dots and debossed indentations cast opposite shadows. The light dial provides a directional vector used internally to split these two layers. Because this is an approximate heuristic rather than a physical sensor, if your result shows the verso (back) text, simply flip the dial by <strong>180°</strong> (e.g., from 0° to 180°) to capture the recto.
-                </p>
-              </div>
             </div>
 
             {/* Supported Languages */}
