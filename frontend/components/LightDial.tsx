@@ -99,9 +99,6 @@ export default function LightDial({ angle, setAngle }: LightDialProps) {
       <div className="mt-2 sm:mt-3 lg:mt-[1.2vh] text-lg sm:text-xl lg:text-2xl font-bold text-blue-400 font-mono">
         {angle}°
       </div>
-      <p className="text-[10px] text-gray-500 mt-0.5 text-center px-1">
-        Recto / Verso helper · Flip 180° if needed
-      </p>
     </div>
   );
 }
