@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Info, X, Mail, Loader2, RotateCcw, Award } from "lucide-react";
+import { Info, X, Mail, Loader2, RotateCcw, Award, HelpCircle } from "lucide-react";
 import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
 import LabelModal from "@/components/LabelModal";
+import OnboardingModal from "@/components/OnboardingModal";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
 import { getOrCreateDeviceId } from "@/lib/clientDevice";
 
@@ -24,6 +25,8 @@ export default function Dashboard() {
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingForced, setOnboardingForced] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Four-corner selection fits screen; Result overlay allows full-page scrolling
@@ -163,6 +166,18 @@ export default function Dashboard() {
               New Image
             </button>
           )}
+
+          <button
+            onClick={() => {
+              setOnboardingForced(true);
+              setShowOnboarding(true);
+            }}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0"
+            title="How to use this app"
+          >
+            <HelpCircle className="w-4 h-4" />
+            How to use?
+          </button>
 
           <button
             onClick={() => setShowAbout(true)}
@@ -379,6 +394,15 @@ export default function Dashboard() {
       <LabelModal
         isOpen={showLabelModal}
         onClose={() => setShowLabelModal(false)}
+      />
+
+      {/* ── First-visit Onboarding Tour ── */}
+      <OnboardingModal
+        forceShow={onboardingForced && showOnboarding}
+        onClose={() => {
+          setShowOnboarding(false);
+          setOnboardingForced(false);
+        }}
       />
     </div>
   );
