@@ -19,11 +19,11 @@ const STORAGE_KEY = "braille_onboarding_done";
 const YOUTUBE_VIDEO_ID: string | null = null; // ← paste your YouTube video ID here
 
 const SCREENSHOT: (string | null)[] = [
-  null,           // Step 1 — Upload           (set to "/guide/step-1.jpg" when ready)
-  null,           // Step 2 — Corner alignment (set to "/guide/step-2.jpg" when ready)
-  null,           // Step 3 — Light dial       (set to "/guide/step-3.jpg" when ready)
-  null,           // Step 4 — Translate        (set to "/guide/step-4.jpg" when ready)
-  null,           // Step 5 — Results          (set to "/guide/step-5.jpg" when ready)
+  "/guide/step-1.jpg",  // Step 1 — Upload zone
+  "/guide/step-2.jpg",  // Step 2 — Corner alignment
+  "/guide/step-3.jpg",  // Step 3 — Light dial
+  "/guide/step-4.jpg",  // Step 4 — Language + button
+  "/guide/step-5.jpg",  // Step 5 — Results panel
 ];
 
 interface Step {
@@ -46,8 +46,8 @@ const STEPS: Step[] = [
     dot: "bg-blue-500",
     title: "Upload a Braille photo",
     description:
-      "Tap or drag any clear photo of a Braille document onto the upload area. Supported formats: JPG, PNG, WebP, TIFF, BMP.",
-    tip: "Tip: A well-lit, sharp photo gives the best results.",
+      "Click anywhere on the upload area — or drag and drop your image directly onto it. Braille documents are pages covered in small raised dots arranged in patterns. A photo taken with any camera or phone works perfectly.",
+    tip: "Supported formats: JPG, PNG, WebP, TIFF, BMP. A well-lit, sharp photo gives the best results.",
   },
   {
     icon: "📐",
@@ -57,8 +57,8 @@ const STEPS: Step[] = [
     dot: "bg-violet-500",
     title: "Align the four corner markers",
     description:
-      "Four blue handles will appear on your image. Drag each handle to match the exact corners of the Braille page. This corrects perspective distortion for accurate recognition.",
-    tip: "Tip: Zoom in for precise alignment on tricky angles.",
+      "After uploading, four blue circles appear at the corners of your image. Drag each one to align precisely with the corners of the Braille page. The blue-shaded area shows the region that will be processed.",
+    tip: "Tip: Try to align corners as accurately as possible — this directly affects recognition quality.",
   },
   {
     icon: "💡",
@@ -68,8 +68,8 @@ const STEPS: Step[] = [
     dot: "bg-amber-500",
     title: "Set the light angle",
     description:
-      "Rotate the dial to match the lighting direction in your photo. This helps distinguish raised dots (recto) from back-side indentations (verso). If the result looks wrong, try rotating by 180°.",
-    tip: "Tip: Most photos have light coming from the top — start at 0°.",
+      "Rotate the dial to match the direction the light was coming from in your photo. The sun icon shows the light source position. This helps the AI distinguish raised dots (front/recto) from back-side indentations (verso).",
+    tip: "If the result looks wrong or inverted, try rotating the dial to 180° — this often fixes it.",
   },
   {
     icon: "🌐",
@@ -79,8 +79,8 @@ const STEPS: Step[] = [
     dot: "bg-emerald-500",
     title: "Choose a language & translate",
     description:
-      'Select your target language from the dropdown — Arabic, French, English, Russian, Chinese, and more. Then click "Extract & Translate" to start the AI recognition.',
-    tip: "Tip: Results appear in real time, character by character.",
+      'Select your target language from the dropdown (Arabic, French, English G1/G2, Russian, Chinese…), then click "Extract & Translate". The AI will begin reading the Braille and translating in real time.',
+    tip: "Tip: Results stream in character by character — you don't have to wait for the full result.",
   },
   {
     icon: "🔊",
@@ -90,8 +90,8 @@ const STEPS: Step[] = [
     dot: "bg-rose-500",
     title: "Listen, copy or download",
     description:
-      'Once the translation is ready, you can play it as audio using text-to-speech, copy the text to your clipboard, or download it as a .txt file to share.',
-    tip: 'Tip: Use "New Image" in the header to start a fresh scan.',
+      'The translated text appears in the "Translated Text" tab. Click "Play Audio" to hear it read aloud, the copy icon to copy it to your clipboard, or the download icon to save it as a .txt file. Switch to "Braille Unicode" to see the raw characters.',
+    tip: 'Tip: Use the "New Image" button in the header to start a fresh scan at any time.',
   },
 ];
 
@@ -214,12 +214,21 @@ function VideoStep({ videoId }: { videoId: string | null }) {
 function StepVisual({ index, step }: { index: number; step: Step }) {
   const src = SCREENSHOT[index] ?? null;
 
+  // Per-step object-position so the most important UI element is always visible
+  const objectPositions = [
+    "object-center",  // Step 1: upload icon is centered
+    "object-top",     // Step 2: corner handles are at top corners
+    "object-center",  // Step 3: dial is centered
+    "object-center",  // Step 4: dropdown + button centered
+    "object-top",     // Step 5: results text starts at top
+  ];
+
   if (src) {
     return (
       <img
         src={src}
         alt={`Step ${index + 1}: ${step.title}`}
-        className="w-full h-full object-cover rounded-xl"
+        className={`w-full h-full object-cover rounded-xl ${objectPositions[index] ?? "object-center"}`}
         draggable={false}
       />
     );
@@ -309,7 +318,7 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
       onClick={() => close(false)}
     >
       <div
-        className="relative w-full max-w-md bg-gray-900 border border-gray-700/80 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300"
+        className="relative w-full max-w-lg bg-gray-900 border border-gray-700/80 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300"
         onClick={(e) => e.stopPropagation()}
         style={{ boxShadow: "0 0 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06)" }}
       >
@@ -337,7 +346,7 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
         <div
           className={`mx-6 mb-5 rounded-2xl border bg-gradient-to-br ${current.color} ${current.border} overflow-hidden flex items-center justify-center`}
           style={{
-            height: isVideoStep ? "13rem" : (SCREENSHOT[step] ? "11rem" : "8rem"),
+            height: isVideoStep ? "13rem" : (SCREENSHOT[step] ? "14rem" : "8rem"),
             transition: "opacity 0.22s ease, height 0.22s ease",
             opacity: animating ? 0 : 1,
           }}
