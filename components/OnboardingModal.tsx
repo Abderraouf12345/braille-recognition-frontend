@@ -1,9 +1,30 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, ChevronRight, ChevronLeft, Sparkles } from "lucide-react";
+import { X, ChevronRight, ChevronLeft, Sparkles, Play } from "lucide-react";
 
 const STORAGE_KEY = "braille_onboarding_done";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG — update these once you have real assets:
+//
+//  • Drop screenshot images into  /public/guide/step-1.jpg … step-5.jpg
+//    (any format: jpg, png, webp)
+//    Leave the path as null to keep the animated placeholder for that step.
+//
+//  • Replace YOUTUBE_VIDEO_ID with the real YouTube video ID (the part after
+//    "watch?v=") once you upload your screen recording.
+//    e.g. "dQw4w9WgXcQ"  →  https://www.youtube.com/watch?v=dQw4w9WgXcQ
+// ─────────────────────────────────────────────────────────────────────────────
+const YOUTUBE_VIDEO_ID: string | null = null; // ← paste your YouTube video ID here
+
+const SCREENSHOT: (string | null)[] = [
+  null,           // Step 1 — Upload           (set to "/guide/step-1.jpg" when ready)
+  null,           // Step 2 — Corner alignment (set to "/guide/step-2.jpg" when ready)
+  null,           // Step 3 — Light dial       (set to "/guide/step-3.jpg" when ready)
+  null,           // Step 4 — Translate        (set to "/guide/step-4.jpg" when ready)
+  null,           // Step 5 — Results          (set to "/guide/step-5.jpg" when ready)
+];
 
 interface Step {
   icon: string;
@@ -58,7 +79,7 @@ const STEPS: Step[] = [
     dot: "bg-emerald-500",
     title: "Choose a language & translate",
     description:
-      "Select your target language from the dropdown — Arabic, French, English, Russian, Chinese, and more. Then click \"Extract & Translate\" to start the AI recognition.",
+      'Select your target language from the dropdown — Arabic, French, English, Russian, Chinese, and more. Then click "Extract & Translate" to start the AI recognition.',
     tip: "Tip: Results appear in real time, character by character.",
   },
   {
@@ -69,12 +90,14 @@ const STEPS: Step[] = [
     dot: "bg-rose-500",
     title: "Listen, copy or download",
     description:
-      "Once the translation is ready, you can play it as audio using text-to-speech, copy the text to your clipboard, or download it as a .txt file to share.",
-    tip: "Tip: Use \"New Image\" in the header to start a fresh scan.",
+      'Once the translation is ready, you can play it as audio using text-to-speech, copy the text to your clipboard, or download it as a .txt file to share.',
+    tip: 'Tip: Use "New Image" in the header to start a fresh scan.',
   },
 ];
 
-const STEP_VISUALS = [
+// ─── Animated CSS placeholders (shown when no screenshot is configured) ───────
+
+const CSS_PLACEHOLDERS = [
   /* Step 0 — Upload */
   <div key="s0" className="relative flex items-center justify-center w-full h-full">
     <div className="w-28 h-20 rounded-xl border-2 border-dashed border-blue-400/60 flex flex-col items-center justify-center gap-2 bg-blue-950/30">
@@ -138,8 +161,78 @@ const STEP_VISUALS = [
   </div>,
 ];
 
+// ─── YouTube embed (shown on the final "bonus" video step) ────────────────────
+
+function VideoStep({ videoId }: { videoId: string | null }) {
+  const [playing, setPlaying] = useState(false);
+
+  if (!videoId) {
+    // Placeholder shown when no video ID is configured yet
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 h-full text-center px-4">
+        <div className="w-14 h-14 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center">
+          <Play className="w-6 h-6 text-gray-500" />
+        </div>
+        <p className="text-xs text-gray-500 leading-relaxed max-w-xs">
+          A short demo video will appear here once it is uploaded.<br />
+          <span className="text-gray-600">Coming soon.</span>
+        </p>
+      </div>
+    );
+  }
+
+  return playing ? (
+    <div className="w-full h-full">
+      <iframe
+        className="w-full h-full rounded-xl"
+        src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`}
+        title="Braille Recognition — demo"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    </div>
+  ) : (
+    <div
+      className="relative w-full h-full cursor-pointer group flex items-center justify-center"
+      onClick={() => setPlaying(true)}
+    >
+      <img
+        src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+        alt="Demo video thumbnail"
+        className="w-full h-full object-cover rounded-xl"
+      />
+      <div className="absolute inset-0 bg-black/40 rounded-xl group-hover:bg-black/30 transition-colors" />
+      <div className="absolute w-14 h-14 rounded-full bg-red-600 group-hover:bg-red-500 transition-colors flex items-center justify-center shadow-xl">
+        <Play className="w-7 h-7 text-white ml-1" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Screenshot visual (photo or CSS fallback) ────────────────────────────────
+
+function StepVisual({ index, step }: { index: number; step: Step }) {
+  const src = SCREENSHOT[index] ?? null;
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={`Step ${index + 1}: ${step.title}`}
+        className="w-full h-full object-cover rounded-xl"
+        draggable={false}
+      />
+    );
+  }
+
+  return CSS_PLACEHOLDERS[index] ?? null;
+}
+
+// ─── All steps including optional video step ───────────────────────────────────
+
+const ALL_STEPS_COUNT = STEPS.length + 1; // +1 for the video step
+
 interface OnboardingModalProps {
-  /** If true, force-show the modal (e.g. triggered by a "How to use?" button) */
   forceShow?: boolean;
   onClose: () => void;
 }
@@ -186,14 +279,28 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
 
   const prev = () => step > 0 && goTo(step - 1, "left");
   const next = () => {
-    if (step < STEPS.length - 1) goTo(step + 1, "right");
+    if (step < ALL_STEPS_COUNT - 1) goTo(step + 1, "right");
     else close(true);
   };
 
   if (!visible) return null;
 
-  const current = STEPS[step];
-  const isLast = step === STEPS.length - 1;
+  const isVideoStep = step === STEPS.length;
+  const isLast = step === ALL_STEPS_COUNT - 1;
+
+  // For the video step we use a special colour scheme
+  const current = isVideoStep
+    ? {
+        color: "from-sky-600/20 to-sky-900/20",
+        border: "border-sky-500/30",
+        accent: "text-sky-400",
+        dot: "bg-sky-500",
+        icon: "🎬",
+        title: "See it in action",
+        description: "Watch a short demo of the full workflow — from uploading a Braille photo to receiving the translated text in seconds.",
+        tip: "Tip: You can re-open this guide any time via the \"How to use?\" button.",
+      }
+    : STEPS[step];
 
   return (
     <div
@@ -207,10 +314,7 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
         style={{ boxShadow: "0 0 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06)" }}
       >
         {/* Top gradient accent line */}
-        <div
-          className={`h-[3px] w-full bg-gradient-to-r ${current.color}`}
-          style={{ opacity: 0.9 }}
-        />
+        <div className={`h-[3px] w-full bg-gradient-to-r ${current.color}`} style={{ opacity: 0.9 }} />
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
@@ -229,12 +333,20 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
           </button>
         </div>
 
-        {/* Visual area */}
+        {/* Visual area — taller when showing a real screenshot or video */}
         <div
-          className={`mx-6 mb-5 rounded-2xl border bg-gradient-to-br ${current.color} ${current.border} h-32 flex items-center justify-center overflow-hidden`}
-          style={{ transition: "opacity 0.22s ease", opacity: animating ? 0 : 1 }}
+          className={`mx-6 mb-5 rounded-2xl border bg-gradient-to-br ${current.color} ${current.border} overflow-hidden flex items-center justify-center`}
+          style={{
+            height: isVideoStep ? "13rem" : (SCREENSHOT[step] ? "11rem" : "8rem"),
+            transition: "opacity 0.22s ease, height 0.22s ease",
+            opacity: animating ? 0 : 1,
+          }}
         >
-          {STEP_VISUALS[step]}
+          {isVideoStep ? (
+            <VideoStep videoId={YOUTUBE_VIDEO_ID} />
+          ) : (
+            <StepVisual index={step} step={STEPS[step]} />
+          )}
         </div>
 
         {/* Text content */}
@@ -258,7 +370,7 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
 
         {/* Step dots */}
         <div className="flex items-center justify-center gap-1.5 mt-5 mb-4">
-          {STEPS.map((_, i) => (
+          {Array.from({ length: ALL_STEPS_COUNT }).map((_, i) => (
             <button
               key={i}
               onClick={() => goTo(i, i > step ? "right" : "left")}
@@ -270,7 +382,7 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
           ))}
         </div>
 
-        {/* Navigation row */}
+        {/* Navigation */}
         <div className="flex items-center justify-between px-6 pb-6 gap-3">
           <button
             onClick={prev}
@@ -303,7 +415,7 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
         {/* Step counter */}
         <div className="absolute bottom-[1.6rem] left-1/2 -translate-x-1/2 pointer-events-none">
           <span className="text-[10px] text-gray-600 font-mono select-none">
-            {step + 1} / {STEPS.length}
+            {step + 1} / {ALL_STEPS_COUNT}
           </span>
         </div>
       </div>
