@@ -214,21 +214,12 @@ function VideoStep({ videoId }: { videoId: string | null }) {
 function StepVisual({ index, step }: { index: number; step: Step }) {
   const src = SCREENSHOT[index] ?? null;
 
-  // Per-step object-position so the most important UI element is always visible
-  const objectPositions = [
-    "object-center",  // Step 1: upload icon is centered
-    "object-top",     // Step 2: corner handles are at top corners
-    "object-center",  // Step 3: dial is centered
-    "object-center",  // Step 4: dropdown + button centered
-    "object-top",     // Step 5: results text starts at top
-  ];
-
   if (src) {
     return (
       <img
         src={src}
         alt={`Step ${index + 1}: ${step.title}`}
-        className={`w-full h-full object-cover rounded-xl ${objectPositions[index] ?? "object-center"}`}
+        className="w-full h-full object-contain rounded-xl"
         draggable={false}
       />
     );
@@ -344,9 +335,9 @@ export default function OnboardingModal({ forceShow = false, onClose }: Onboardi
 
         {/* Visual area — taller when showing a real screenshot or video */}
         <div
-          className={`mx-6 mb-5 rounded-2xl border bg-gradient-to-br ${current.color} ${current.border} overflow-hidden flex items-center justify-center`}
+          className={`mx-6 mb-5 rounded-2xl border bg-gradient-to-br ${current.color} ${current.border} overflow-hidden flex items-center justify-center bg-gray-950/60`}
           style={{
-            height: isVideoStep ? "13rem" : (SCREENSHOT[step] ? "14rem" : "8rem"),
+            height: isVideoStep ? "13rem" : (SCREENSHOT[step] ? "16rem" : "8rem"),
             transition: "opacity 0.22s ease, height 0.22s ease",
             opacity: animating ? 0 : 1,
           }}
