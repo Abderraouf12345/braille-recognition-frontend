@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, ChevronRight, ChevronLeft, Sparkles, Play, Navigation } from "lucide-react";
+import { X, ChevronRight, ChevronLeft, Sparkles, Play } from "lucide-react";
 
 const STORAGE_KEY = "braille_onboarding_done";
 
@@ -235,10 +235,9 @@ const ALL_STEPS_COUNT = STEPS.length + 1; // +1 for the video step
 interface OnboardingModalProps {
   forceShow?: boolean;
   onClose: () => void;
-  onStartInteractiveTour?: () => void;
 }
 
-export default function OnboardingModal({ forceShow = false, onClose, onStartInteractiveTour }: OnboardingModalProps) {
+export default function OnboardingModal({ forceShow = false, onClose }: OnboardingModalProps) {
   const [step, setStep] = useState(0);
   const [visible, setVisible] = useState(false);
   const [animating, setAnimating] = useState(false);
@@ -325,28 +324,13 @@ export default function OnboardingModal({ forceShow = false, onClose, onStartInt
               Quick Start Guide
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {onStartInteractiveTour && (
-              <button
-                onClick={() => {
-                  close(false);
-                  onStartInteractiveTour();
-                }}
-                className="flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-950/40 hover:bg-blue-900/50 border border-blue-500/30 px-2.5 py-1 rounded-xl transition-all shadow-sm"
-                title="Launch live interactive walkthrough"
-              >
-                <Navigation className="w-3.5 h-3.5" />
-                <span>Live Tour</span>
-              </button>
-            )}
-            <button
-              onClick={() => close(false)}
-              className="text-gray-500 hover:text-white transition-colors bg-gray-800 hover:bg-gray-700 p-1.5 rounded-full"
-              title="Close"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={() => close(false)}
+            className="text-gray-500 hover:text-white transition-colors bg-gray-800 hover:bg-gray-700 p-1.5 rounded-full"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Visual area — taller when showing a real screenshot or video */}
