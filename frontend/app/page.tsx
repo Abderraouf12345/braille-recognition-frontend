@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Info, X, Mail, Loader2, RotateCcw, Award, HelpCircle } from "lucide-react";
+import { Info, X, Mail, Loader2, RotateCcw, HelpCircle } from "lucide-react";
 import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
-import LabelModal from "@/components/LabelModal";
 import OnboardingModal from "@/components/OnboardingModal";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
 import { getOrCreateDeviceId } from "@/lib/clientDevice";
@@ -24,7 +23,6 @@ export default function Dashboard() {
   });
   const [overlayImage, setOverlayImage] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
-  const [showLabelModal, setShowLabelModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingForced, setOnboardingForced] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -142,15 +140,6 @@ export default function Dashboard() {
             <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
               Braille Recognition
             </h1>
-            {/* Small Label "Projet Innovant" Badge next to title */}
-            <button
-              onClick={() => setShowLabelModal(true)}
-              className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-all bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/30 hover:border-emerald-400/50 px-3 py-1.5 rounded-xl shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.12)] cursor-pointer"
-              title="Official Label 'Projet Innovant' — Click to view details"
-            >
-              <Award className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Label "Projet Innovant"</span>
-            </button>
           </div>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">AI-powered Braille recognition &amp; multi-language translation</p>
         </div>
@@ -269,7 +258,7 @@ export default function Dashboard() {
 
       {/* ── Footer ── */}
       <footer className="mt-3 pt-3 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-600 shrink-0">
-        <span>© {new Date().getFullYear()} Braille Recognition — All rights reserved.</span>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2"><span>© {new Date().getFullYear()} Braille Recognition — All rights reserved.</span><span className="text-gray-700 hidden sm:inline">·</span><span>Awarded the &ldquo;Innovative Project&rdquo; label by the National Committee for Labeling Startups &amp; Innovative Projects (Algeria).</span></div>
         <div className="flex flex-col sm:flex-row items-center gap-3">
           <a
             href="mailto:abderraouf.benmohieddine@g.enp.edu.dz"
@@ -389,12 +378,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-      {/* ── Official Label "Projet Innovant" Modal ── */}
-      <LabelModal
-        isOpen={showLabelModal}
-        onClose={() => setShowLabelModal(false)}
-      />
 
       {/* ── First-visit Onboarding Tour ── */}
       <OnboardingModal
