@@ -6,8 +6,6 @@ import ImageWorkspace from "@/components/ImageWorkspace";
 import LightDial from "@/components/LightDial";
 import ResultsPanel from "@/components/ResultsPanel";
 import OnboardingModal from "@/components/OnboardingModal";
-import InteractiveTour from "@/components/InteractiveTour";
-import GuideChoiceModal from "@/components/GuideChoiceModal";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
 import { getOrCreateDeviceId } from "@/lib/clientDevice";
 
@@ -27,8 +25,6 @@ export default function Dashboard() {
   const [showAbout, setShowAbout] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingForced, setOnboardingForced] = useState(false);
-  const [showGuideChoice, setShowGuideChoice] = useState(false);
-  const [showInteractiveTour, setShowInteractiveTour] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Four-corner selection fits screen; Result overlay allows full-page scrolling
@@ -46,28 +42,6 @@ export default function Dashboard() {
     setResults({ braille: "", arabic: "" });
     setOverlayImage(null);
     setError(null);
-  };
-
-  // Pre-load demo state for the interactive tour
-  const handleStartTourDemo = async () => {
-    try {
-      const response = await fetch("/guide/step-2.jpg");
-      const blob = await response.blob();
-      const demoFile = new File([blob], "sample_braille_exam.jpg", { type: "image/jpeg" });
-      setImageFile(demoFile);
-      setLanguage("english_g1");
-      setResults({
-        braille: "⠠⠞⠓⠑ ⠋⠊⠗⠎⠞ ⠑⠝⠛⠇⠊⠎⠓ ⠑⠭⠁⠍\n⠠⠛⠕⠕⠙ ⠍⠕⠗⠝⠊⠝⠛⠂ ⠍⠽ ⠝⠁⠍⠑ ⠊⠎ ⠠⠎⠓⠁⠍\n⠠⠊ ⠁⠍ ⠝⠊⠝⠑ ⠽⠑⠁⠗⠎ ⠕⠇⠙",
-        arabic: "The first english exam\nGood morning, my name is Sham.\nI am nine years old."
-      });
-      setError(null);
-    } catch (e) {
-      console.error("Failed to load demo image for tour:", e);
-    }
-  };
-
-  const handleEndTourDemo = () => {
-    handleReset();
   };
 
   const handleProcess = async () => {
@@ -105,15 +79,11 @@ export default function Dashboard() {
           "x-device-id": getOrCreateDeviceId(),
         },
         body: formData,
-        signal: controller.signal
+        signal: controller.signal,
       });
 
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-
-      if (!response.body) {
-        throw new Error("ReadableStream not supported by browser/server.");
+      if (!response.ok || !response.body) {
+        throw new Error(`Server error: ${response.status}`);
       }
 
       const reader = response.body.getReader();
@@ -126,45 +96,35 @@ export default function Dashboard() {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
-        buffer = lines.pop() || ""; // Keep partial chunk in buffer
+        buffer = lines.pop() ?? "";
 
-        for (const block of lines) {
-          if (!block.trim()) continue;
-          
-          let eventType = "message";
-          let dataStr = "";
-
-          const eventMatch = block.match(/^event:\s*(.+)$/m);
-          if (eventMatch) eventType = eventMatch[1].trim();
-
-          const dataMatch = block.match(/^data:\s*(.+)$/m);
-          if (dataMatch) dataStr = dataMatch[1].trim();
-
-          if (eventType === "result" && dataStr) {
-            try {
-              const parsed = JSON.parse(dataStr);
-              setResults({
-                braille: parsed.braille_text || "",
-                arabic: parsed.translated_text || ""
-              });
-              if (parsed.overlay_image) {
-                setOverlayImage(`data:image/jpeg;base64,${parsed.overlay_image}`);
-              }
-            } catch (err) {
-              console.error("JSON parse error:", err);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          try {
+            const event = JSON.parse(jsonStr);
+            if (event.type === "overlay") {
+              setOverlayImage(event.value);
+            } else if (event.type === "braille") {
+              setResults(prev => ({ ...prev, braille: event.value }));
+              setIsProcessing(false); // UI unlocked as soon as braille arrives
+            } else if (event.type === "translation") {
+              setResults(prev => ({ ...prev, arabic: event.value }));
+            } else if (event.type === "done") {
+              setIsProcessing(false);
+            } else if (event.type === "error") {
+              setError(event.value);
+              setIsProcessing(false);
             }
-          } else if (eventType === "error") {
-            setError(dataStr || "Processing failed");
+          } catch {
+            // ignore malformed SSE lines
           }
         }
       }
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return;
-      }
-      console.error(err);
-      setError(err.message || "Failed to process image");
-    } finally {
+      if (err.name === "AbortError") return;
+      setError(err.message || "Failed to connect to the processing server.");
       setIsProcessing(false);
     }
   };
@@ -197,7 +157,10 @@ export default function Dashboard() {
           )}
 
           <button
-            onClick={() => setShowGuideChoice(true)}
+            onClick={() => {
+              setOnboardingForced(true);
+              setShowOnboarding(true);
+            }}
             className="flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 transition-colors bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl shrink-0"
             title="How to use this app"
           >
@@ -220,12 +183,9 @@ export default function Dashboard() {
       }`}>
         
         {/* Left Side: Workspace */}
-        <div 
-          id="tour-workspace"
-          className={`flex-1 flex flex-col relative ${
-            isCornerSelectionMode ? "min-h-[420px] lg:min-h-0 h-full" : "min-h-[500px]"
-          }`}
-        >
+        <div className={`flex-1 flex flex-col relative ${
+          isCornerSelectionMode ? "min-h-[420px] lg:min-h-0 h-full" : "min-h-[500px]"
+        }`}>
           <ImageWorkspace 
             imageFile={imageFile} 
             setImageFile={(file) => {
@@ -245,59 +205,53 @@ export default function Dashboard() {
           isCornerSelectionMode ? "lg:h-full lg:overflow-y-auto" : ""
         }`}>
           
-          <div id="tour-light-dial">
-            <LightDial angle={lightAngle} setAngle={setLightAngle} />
+          <LightDial angle={lightAngle} setAngle={setLightAngle} />
+          
+          <div className="bg-gray-800 p-3 sm:p-4 lg:p-[1.5vh] rounded-2xl border border-gray-700 shadow-xl shrink-0">
+            <h3 className="text-gray-400 text-xs sm:text-sm font-medium mb-2 sm:mb-2.5 lg:mb-[1vh]">Translation Language</h3>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-xs sm:text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 sm:p-3 lg:p-[1.2vh] outline-none"
+            >
+              <option value="arabic">Arabic — عربي</option>
+              <option value="french">French — Français</option>
+              <option value="english_g1">English G1 — Grade 1 (literal)</option>
+              <option value="english_g2">English G2 — Grade 2 (contrac.)</option>
+              <option value="russian">Russian — Русский</option>
+              <option value="chinese">Chinese — 中文</option>
+              <option value="shuangpin">Shuangpin — 汉语双拼盲文</option>
+              <option value="raw">Braille Unicode Only (No Dictionary)</option>
+            </select>
           </div>
           
-          <div id="tour-controls" className="flex flex-col gap-2.5 sm:gap-3 lg:gap-[1.5vh]">
-            <div className="bg-gray-800 p-3 sm:p-4 lg:p-[1.5vh] rounded-2xl border border-gray-700 shadow-xl shrink-0">
-              <h3 className="text-gray-400 text-xs sm:text-sm font-medium mb-2 sm:mb-2.5 lg:mb-[1vh]">Translation Language</h3>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full bg-gray-900 border border-gray-700 text-gray-200 text-xs sm:text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 sm:p-3 lg:p-[1.2vh] outline-none"
-              >
-                <option value="arabic">Arabic — عربي</option>
-                <option value="french">French — Français</option>
-                <option value="english_g1">English G1 — Grade 1 (literal)</option>
-                <option value="english_g2">English G2 — Grade 2 (contrac.)</option>
-                <option value="russian">Russian — Русский</option>
-                <option value="chinese">Chinese — 中文</option>
-                <option value="shuangpin">Shuangpin — 汉语双拼盲文</option>
-                <option value="raw">Braille Unicode Only (No Dictionary)</option>
-              </select>
-            </div>
-            
-            <div className="shrink-0">
-              <button 
-                onClick={handleProcess}
-                disabled={!imageFile || isProcessing || corners.length !== 4}
-                className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 sm:py-3 lg:py-[1.4vh] rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-sm sm:text-base lg:text-lg flex items-center justify-center space-x-3"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    <span>Extracting & Translating...</span>
-                  </>
-                ) : (
-                  <span>Extract & Translate</span>
-                )}
-              </button>
-              {error && (
-                <p className="text-red-400 text-sm mt-2 bg-red-900/20 p-2.5 rounded-lg border border-red-800">
-                  {error}
-                </p>
+          <div className="shrink-0">
+            <button 
+              onClick={handleProcess}
+              disabled={!imageFile || isProcessing || corners.length !== 4}
+              className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 sm:py-3 lg:py-[1.4vh] rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-sm sm:text-base lg:text-lg flex items-center justify-center space-x-3"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span>Extracting & Translating...</span>
+                </>
+              ) : (
+                <span>Extract & Translate</span>
               )}
-            </div>
+            </button>
+            {error && (
+              <p className="text-red-400 text-sm mt-2 bg-red-900/20 p-2.5 rounded-lg border border-red-800">
+                {error}
+              </p>
+            )}
           </div>
 
-          <div id="tour-results" className="flex-1 flex flex-col min-h-0">
-            <ResultsPanel 
-              braille={results.braille} 
-              arabic={results.arabic}
-              language={language}
-            />
-          </div>
+          <ResultsPanel 
+            braille={results.braille} 
+            arabic={results.arabic}
+            language={language}
+          />
 
         </div>
       </div>
@@ -425,37 +379,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Guide Choice Dialog ── */}
-      <GuideChoiceModal
-        isOpen={showGuideChoice}
-        onClose={() => setShowGuideChoice(false)}
-        onSelectInteractiveTour={() => setShowInteractiveTour(true)}
-        onSelectVisualGuide={() => {
-          setOnboardingForced(true);
-          setShowOnboarding(true);
-        }}
-      />
-
-      {/* ── Interactive Live Spotlight Tour ── */}
-      <InteractiveTour
-        isOpen={showInteractiveTour}
-        onClose={() => setShowInteractiveTour(false)}
-        onStartDemo={handleStartTourDemo}
-        onEndDemo={handleEndTourDemo}
-        onOpenVisualGuide={() => {
-          setOnboardingForced(true);
-          setShowOnboarding(true);
-        }}
-      />
-
-      {/* ── First-visit Visual Guide Modal (Screenshots & Video) ── */}
+      {/* ── First-visit Onboarding Tour ── */}
       <OnboardingModal
         forceShow={onboardingForced && showOnboarding}
         onClose={() => {
           setShowOnboarding(false);
           setOnboardingForced(false);
         }}
-        onStartInteractiveTour={() => setShowInteractiveTour(true)}
       />
     </div>
   );
