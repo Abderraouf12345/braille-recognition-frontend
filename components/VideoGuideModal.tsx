@@ -107,10 +107,7 @@ export default function VideoGuideModal({
           <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
             <VideoIcon className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="text-sm sm:text-base font-semibold leading-tight">How to Use — Video Demonstration</h2>
-            <p className="text-[11px] sm:text-xs text-gray-400">Full-screen visual walkthrough of Braille Recognition</p>
-          </div>
+          <h2 className="text-sm sm:text-base font-semibold leading-tight">How to Use — Video Demonstration</h2>
         </div>
 
         <button
@@ -178,15 +175,6 @@ export default function VideoGuideModal({
             </label>
           </div>
         )}
-      </div>
-
-      {/* ── Bottom Hint ── */}
-      <div
-        className="w-full max-w-7xl flex items-center justify-between text-[11px] text-gray-500 pt-2 shrink-0 px-1"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <span>Press <kbd className="px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded border border-gray-700">ESC</kbd> or click outside to exit full-screen mode</span>
-        <span>Braille Recognition</span>
       </div>
     </div>
   );
