@@ -353,6 +353,45 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Project Origins & Credits */}
+            <div className="p-6 border-b border-gray-800 space-y-4">
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Project Origins &amp; Credits</h3>
+
+              {/* Developers */}
+              <div>
+                <p className="text-xs text-gray-400 font-medium mb-1.5">Developed by</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="bg-gray-800/80 border border-gray-700/70 rounded-xl p-3">
+                    <p className="text-sm font-semibold text-white">Benmohieddine Abderraouf</p>
+                    <p className="text-xs text-blue-400 mt-0.5">École Nationale Polytechnique (ENP)</p>
+                  </div>
+                  <div className="bg-gray-800/80 border border-gray-700/70 rounded-xl p-3">
+                    <p className="text-sm font-semibold text-white">Amellal Abderraouf</p>
+                    <p className="text-xs text-blue-400 mt-0.5">École Nationale Polytechnique (ENP)</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Background narrative */}
+              <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl p-3.5">
+                <p className="text-xs text-gray-300 leading-relaxed">
+                  This project initially began during an internship at the <strong className="text-white font-medium">Centre de Développement des Technologies Avancées (CDTA)</strong>, as part of our engineering studies at <strong className="text-white font-medium">École Nationale Polytechnique (ENP)</strong>, and was subsequently advanced and developed independently beyond the internship.
+                </p>
+              </div>
+
+              {/* Supervision */}
+              <div>
+                <p className="text-xs text-gray-400 font-medium mb-1.5">Internship Supervision</p>
+                <div className="flex flex-wrap gap-2">
+                  {["Nabil Zerrouki", "El Tahir Zemmouri", "Ouladji Maamar"].map((name) => (
+                    <span key={name} className="text-xs bg-gray-800/90 border border-gray-700/80 text-gray-300 px-2.5 py-1 rounded-lg">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Contact */}
             <div className="p-6">
               <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Contact</h3>
