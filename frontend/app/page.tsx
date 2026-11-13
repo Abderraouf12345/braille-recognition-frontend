@@ -11,7 +11,7 @@ import { getOrCreateDeviceId } from "@/lib/clientDevice";
 
 export default function Dashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [corners, setCorners] = useState<{x: number, y: number}[]>([]);
+  const [corners, setCorners] = useState<{ x: number, y: number }[]>([]);
   const [lightAngle, setLightAngle] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,9 +129,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className={`min-h-screen bg-gray-950 text-gray-100 p-4 sm:p-5 lg:p-6 flex flex-col font-sans selection:bg-blue-500/30 ${
-      isCornerSelectionMode ? "lg:h-screen lg:max-h-screen lg:overflow-hidden" : ""
-    }`}>
+    <div className={`min-h-screen bg-gray-950 text-gray-100 p-4 sm:p-5 lg:p-6 flex flex-col font-sans selection:bg-blue-500/30 ${isCornerSelectionMode ? "lg:h-screen lg:max-h-screen lg:overflow-hidden" : ""
+      }`}>
       {/* ── Top Header ── */}
       <header className="mb-4 flex items-start justify-between gap-4 shrink-0">
         <div>
@@ -142,7 +141,7 @@ export default function Dashboard() {
           </div>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">AI-powered Braille recognition &amp; multi-language translation</p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {imageFile && (
             <button
@@ -174,22 +173,20 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className={`flex-1 flex flex-col lg:flex-row gap-6 min-h-0 ${
-        isCornerSelectionMode ? "lg:overflow-hidden" : ""
-      }`}>
-        
-        {/* Left Side: Workspace */}
-        <div className={`flex-1 flex flex-col relative ${
-          isCornerSelectionMode ? "min-h-[420px] lg:min-h-0 h-full" : "min-h-[500px]"
+      <div className={`flex-1 flex flex-col lg:flex-row gap-6 min-h-0 ${isCornerSelectionMode ? "lg:overflow-hidden" : ""
         }`}>
-          <ImageWorkspace 
-            imageFile={imageFile} 
+
+        {/* Left Side: Workspace */}
+        <div className={`flex-1 flex flex-col relative ${isCornerSelectionMode ? "min-h-[420px] lg:min-h-0 h-full" : "min-h-[500px]"
+          }`}>
+          <ImageWorkspace
+            imageFile={imageFile}
             setImageFile={(file) => {
               setImageFile(file);
               if (!file) setOverlayImage(null);
-            }} 
-            corners={corners} 
-            setCorners={setCorners} 
+            }}
+            corners={corners}
+            setCorners={setCorners}
             overlayImage={overlayImage}
             onClearOverlay={() => setOverlayImage(null)}
             isLocked={isProcessing}
@@ -197,12 +194,11 @@ export default function Dashboard() {
         </div>
 
         {/* Right Side: Controls & Results */}
-        <div className={`w-full lg:w-[420px] xl:w-[460px] flex flex-col gap-2.5 sm:gap-3 lg:gap-[1.5vh] shrink-0 pr-1 lg:pr-2 custom-scrollbar ${
-          isCornerSelectionMode ? "lg:h-full lg:overflow-y-auto" : ""
-        }`}>
-          
+        <div className={`w-full lg:w-[420px] xl:w-[460px] flex flex-col gap-2.5 sm:gap-3 lg:gap-[1.5vh] shrink-0 pr-1 lg:pr-2 custom-scrollbar ${isCornerSelectionMode ? "lg:h-full lg:overflow-y-auto" : ""
+          }`}>
+
           <LightDial angle={lightAngle} setAngle={setLightAngle} />
-          
+
           <div className="bg-gray-800 p-3 sm:p-4 lg:p-[1.5vh] rounded-2xl border border-gray-700 shadow-xl shrink-0">
             <h3 className="text-gray-400 text-xs sm:text-sm font-medium mb-2 sm:mb-2.5 lg:mb-[1vh]">Translation Language</h3>
             <select
@@ -220,9 +216,9 @@ export default function Dashboard() {
               <option value="raw">Braille Unicode Only (No Dictionary)</option>
             </select>
           </div>
-          
+
           <div className="shrink-0">
-            <button 
+            <button
               onClick={handleProcess}
               disabled={!imageFile || isProcessing || corners.length !== 4}
               className="w-full relative overflow-hidden group bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 sm:py-3 lg:py-[1.4vh] rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all font-semibold text-sm sm:text-base lg:text-lg flex items-center justify-center space-x-3"
@@ -243,8 +239,8 @@ export default function Dashboard() {
             )}
           </div>
 
-          <ResultsPanel 
-            braille={results.braille} 
+          <ResultsPanel
+            braille={results.braille}
             arabic={results.arabic}
             language={language}
           />
@@ -319,11 +315,11 @@ export default function Dashboard() {
                 {[
                   { step: "1", icon: "📷", title: "Upload a Braille image", desc: "Click the upload area and select a clear photo of a Braille page (JPG, PNG, WebP, TIFF or BMP)." },
                   { step: "2", icon: "📐", title: "Adjust the corner markers", desc: "Drag the four blue corner handles to align with the edges of the Braille page for accurate perspective correction." },
-                  { 
-                    step: "3", 
-                    icon: "💡", 
-                    title: "Set light angle (Recto / Verso separation)", 
-                    desc: "This feature is only intended to help distinguish the <strong>recto</strong> (front raised dots) from the <strong>verso</strong> (back indentations) on double-sided Braille documents. It is a basic, non-deterministic heuristic rather than an exact light detector: if selecting an angle (e.g. 0°) incorrectly captures the verso layer, rotating by <strong>180°</strong> will invert the classification to retrieve the recto layer." 
+                  {
+                    step: "3",
+                    icon: "💡",
+                    title: "Set light angle (Recto / Verso separation)",
+                    desc: "This feature is only intended to help distinguish the <strong>recto</strong> (front raised dots) from the <strong>verso</strong> (back indentations) on double-sided Braille documents. It is a basic, non-deterministic heuristic rather than an exact light detector: if selecting an angle (e.g. 0°) incorrectly captures the verso layer, rotating by <strong>180°</strong> will invert the classification to retrieve the recto layer."
                   },
                   { step: "4", icon: "🌐", title: "Choose a language &amp; translate", desc: "Select your target language and click Extract &amp; Translate. Results appear in real time." },
                   { step: "5", icon: "🔊", title: "Listen, copy or download", desc: "Use the audio player to hear the translation read aloud, copy it to your clipboard, or download it as a text file." },
@@ -383,7 +379,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-xs text-gray-400 font-medium mb-1.5">Internship Supervision</p>
                 <div className="flex flex-wrap gap-2">
-                  {["Nabil Zerrouki", "El Tahir Zemmouri", "Ouladji Maamar"].map((name) => (
+                  {["Nabil Zerrouki", "El Tahir Zemmouri", "Ouladj Maamar"].map((name) => (
                     <span key={name} className="text-xs bg-gray-800/90 border border-gray-700/80 text-gray-300 px-2.5 py-1 rounded-lg">
                       {name}
                     </span>
