@@ -371,13 +371,13 @@ export default function Dashboard() {
               {/* Background narrative */}
               <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl p-3.5">
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  This project initially began during an internship at the <strong className="text-white font-medium">Centre de Développement des Technologies Avancées (CDTA)</strong>, as part of our engineering studies at <strong className="text-white font-medium">École Nationale Polytechnique (ENP)</strong>, and was subsequently advanced and developed independently beyond the internship.
+                  This project was developed as our <strong className="text-white font-medium">Projet de Fin d&apos;Études (PFE)</strong> at the <strong className="text-white font-medium">Centre de Développement des Technologies Avancées (CDTA)</strong>, as part of our engineering studies at <strong className="text-white font-medium">École Nationale Polytechnique (ENP)</strong>.
                 </p>
               </div>
 
               {/* Supervision */}
               <div>
-                <p className="text-xs text-gray-400 font-medium mb-1.5">Internship Supervision</p>
+                <p className="text-xs text-gray-400 font-medium mb-1.5">Project Supervision</p>
                 <div className="flex flex-wrap gap-2">
                   {["Nabil Zerrouki", "El Tahir Zemmouri", "Ouladj Maamar"].map((name) => (
                     <span key={name} className="text-xs bg-gray-800/90 border border-gray-700/80 text-gray-300 px-2.5 py-1 rounded-lg">
