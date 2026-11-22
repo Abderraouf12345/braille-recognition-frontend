@@ -5,11 +5,8 @@ import { motion } from "framer-motion";
 import {
   Upload,
   Loader2,
-  RotateCcw,
   Maximize2,
   Check,
-  MousePointer,
-  Undo2,
 } from "lucide-react";
 import { optimizeImageForUpload } from "../utils/imageCompressor";
 
@@ -22,7 +19,7 @@ interface ImageWorkspaceProps {
   imageFile: File | null;
   setImageFile: (file: File | null) => void;
   corners: Point[];
-  setCorners: (corners: Point[]) => void;
+  setCorners: React.Dispatch<React.SetStateAction<Point[]>>;
   overlayImage?: string | null;
   onClearOverlay?: () => void;
   isLocked?: boolean;
@@ -192,10 +189,18 @@ export default function ImageWorkspace({
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget;
     setImgSize({ width: naturalWidth, height: naturalHeight });
-    // In Stage 1, we start with empty corners so user taps the 4 corners cleanly.
+    // Initially position the four corners at the extreme edges of the image
+    if (corners.length !== 4) {
+      setCorners([
+        { x: 0, y: 0 },
+        { x: naturalWidth, y: 0 },
+        { x: naturalWidth, y: naturalHeight },
+        { x: 0, y: naturalHeight },
+      ]);
+    }
   };
 
-  // Reset to full default margins or clear to tap fresh (Extreme edges of the image)
+  // Reset to extreme image edges
   const handleResetToFit = () => {
     if (isLocked || imgSize.width === 0) return;
     setCorners([
@@ -206,33 +211,108 @@ export default function ImageWorkspace({
     ]);
   };
 
-  const handleClearToRetap = () => {
+  // Move point and update loupe
+  const updateCornerPosition = useCallback(
+    (index: number, naturalX: number, naturalY: number) => {
+      if (imgSize.width === 0 || imgSize.height === 0) return;
+      const imgEl = document.getElementById("braille-preview-img") as HTMLImageElement;
+      if (!imgEl || !containerRef.current) return;
+
+      const imgRect = imgEl.getBoundingClientRect();
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const renderW = imgRect.width;
+      const renderH = imgRect.height;
+      const offsetX = imgRect.left - containerRect.left;
+      const offsetY = imgRect.top - containerRect.top;
+
+      const currentScreenX = offsetX + (naturalX / imgSize.width) * renderW;
+      const currentScreenY = offsetY + (naturalY / imgSize.height) * renderH;
+
+      setCorners((prev) => {
+        const next = [...prev];
+        next[index] = { x: naturalX, y: naturalY };
+        return next;
+      });
+
+      setLoupe({
+        visible: true,
+        x: currentScreenX,
+        y: currentScreenY,
+        naturalX,
+        naturalY,
+        index,
+      });
+    },
+    [imgSize, setCorners]
+  );
+
+  // Global mousemove/touchmove and mouseup/touchend for quadrant click-and-drag
+  useEffect(() => {
+    if (activeDragIndex === null) return;
+
+    const getNaturalCoords = (clientX: number, clientY: number) => {
+      const imgEl = document.getElementById("braille-preview-img") as HTMLImageElement;
+      if (!imgEl || imgSize.width === 0 || imgSize.height === 0) return null;
+
+      const rect = imgEl.getBoundingClientRect();
+      const clickX = clientX - rect.left;
+      const clickY = clientY - rect.top;
+
+      const clampedX = Math.max(0, Math.min(rect.width, clickX));
+      const clampedY = Math.max(0, Math.min(rect.height, clickY));
+
+      const naturalX = Math.round((clampedX / rect.width) * imgSize.width);
+      const naturalY = Math.round((clampedY / rect.height) * imgSize.height);
+      return { naturalX, naturalY };
+    };
+
+    const handlePointerMove = (e: MouseEvent | TouchEvent) => {
+      const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+      const coords = getNaturalCoords(clientX, clientY);
+      if (coords) {
+        updateCornerPosition(activeDragIndex, coords.naturalX, coords.naturalY);
+      }
+    };
+
+    const handlePointerUp = () => {
+      setActiveDragIndex(null);
+      setLoupe((prev) => ({ ...prev, visible: false }));
+      setCorners((prev) => sortQuadCorners(prev));
+    };
+
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+    window.addEventListener("touchmove", handlePointerMove);
+    window.addEventListener("touchend", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+      window.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("touchend", handlePointerUp);
+    };
+  }, [activeDragIndex, imgSize, setCorners, updateCornerPosition]);
+
+  // Quadrant Section Click Handler:
+  // Divides image into 4 sections (TL: 0, TR: 1, BR: 2, BL: 3).
+  // When pressing down anywhere in a quadrant, that quadrant's corner jumps to cursor
+  // and immediately attaches for continuous drag until release.
+  const handleCanvasPointerDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (isLocked) return;
-    setCorners([]);
-  };
 
-  const handleUndoLastPoint = () => {
-    if (isLocked || corners.length === 0) return;
-    setCorners(corners.slice(0, -1));
-  };
-
-  // Stage 1 click handler: tap the 4 corners in any order
-  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isLocked) return;
-    // When 4 corners are already selected, we are in Stage 2 (Fine-tuning / Drag handles active)
-    if (corners.length >= 4) return;
-
-    const imgEl = document.getElementById(
-      "braille-preview-img"
-    ) as HTMLImageElement;
+    const imgEl = document.getElementById("braille-preview-img") as HTMLImageElement;
     if (!imgEl || imgSize.width === 0 || imgSize.height === 0) return;
 
-    const rect = imgEl.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
 
-    // Allow clicking slightly outside (margin of 25px) and clamp to bounds
-    const margin = 25;
+    const rect = imgEl.getBoundingClientRect();
+    const clickX = clientX - rect.left;
+    const clickY = clientY - rect.top;
+
+    // Check bounds with small margin tolerance
+    const margin = 20;
     if (
       clickX < -margin ||
       clickX > rect.width + margin ||
@@ -248,15 +328,28 @@ export default function ImageWorkspace({
     const naturalX = Math.round((clampedX / rect.width) * imgSize.width);
     const naturalY = Math.round((clampedY / rect.height) * imgSize.height);
 
-    const newPoints = [...corners, { x: naturalX, y: naturalY }];
+    // Determine quadrant based on center of image:
+    // Section 0 (Top-Left): x < midX && y < midY
+    // Section 1 (Top-Right): x >= midX && y < midY
+    // Section 2 (Bottom-Right): x >= midX && y >= midY
+    // Section 3 (Bottom-Left): x < midX && y >= midY
+    const midX = imgSize.width / 2;
+    const midY = imgSize.height / 2;
 
-    // As soon as the 4th corner is tapped, auto-sort geometrically into [TL, TR, BR, BL]!
-    if (newPoints.length === 4) {
-      const sorted = sortQuadCorners(newPoints);
-      setCorners(sorted);
+    let targetIndex = 0;
+    if (naturalX < midX && naturalY < midY) {
+      targetIndex = 0; // Top-Left
+    } else if (naturalX >= midX && naturalY < midY) {
+      targetIndex = 1; // Top-Right
+    } else if (naturalX >= midX && naturalY >= midY) {
+      targetIndex = 2; // Bottom-Right
     } else {
-      setCorners(newPoints);
+      targetIndex = 3; // Bottom-Left
     }
+
+    // Instantly jump the corresponding corner to cursor and attach it for active drag
+    setActiveDragIndex(targetIndex);
+    updateCornerPosition(targetIndex, naturalX, naturalY);
   };
 
   return (
@@ -334,81 +427,34 @@ export default function ImageWorkspace({
             {/* Context Status & Helper */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-blue-200 bg-blue-950/70 border border-blue-500/30 px-3 py-1.5 rounded-xl font-medium flex items-center gap-2 shadow-sm">
-                {corners.length === 0 && (
-                  <>
-                    <MousePointer className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Stage 1: Tap the 4 corners in any order (0 of 4)</span>
-                  </>
-                )}
-                {corners.length > 0 && corners.length < 4 && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                    <span>
-                      Corner {corners.length + 1} of 4: Tap next corner
-                    </span>
-                  </>
-                )}
-                {corners.length === 4 && (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-emerald-300">
-                      Stage 2: Drag handles to fine-tune
-                    </span>
-                  </>
-                )}
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-300">
+                  Click any section or drag handles to position corners
+                </span>
               </span>
             </div>
 
             {/* Quick Actions */}
             <div className="flex items-center gap-1.5">
-              {corners.length > 0 && corners.length < 4 && (
-                <button
-                  type="button"
-                  onClick={handleUndoLastPoint}
-                  disabled={isLocked}
-                  className="flex items-center gap-1 text-xs text-amber-300 hover:text-amber-200 bg-amber-950/60 hover:bg-amber-900/70 border border-amber-600/40 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
-                  title="Undo previous corner tap"
-                >
-                  <Undo2 className="w-3 h-3 text-amber-400" />
-                  <span>Undo</span>
-                </button>
-              )}
-
-              {corners.length < 4 && (
-                <button
-                  type="button"
-                  onClick={handleResetToFit}
-                  disabled={isLocked}
-                  className="flex items-center gap-1 text-xs text-gray-300 hover:text-white bg-gray-800/90 hover:bg-gray-700/90 border border-gray-700/80 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
-                  title="Auto-fit corners to default page margins"
-                >
-                  <Maximize2 className="w-3 h-3 text-gray-400" />
-                  <span className="hidden sm:inline">Auto Borders</span>
-                </button>
-              )}
-
-              {corners.length === 4 && (
-                <button
-                  type="button"
-                  onClick={handleClearToRetap}
-                  disabled={isLocked}
-                  className="flex items-center gap-1 text-xs text-gray-300 hover:text-red-400 bg-gray-800/90 hover:bg-gray-700/90 border border-gray-700/80 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
-                  title="Clear all points and re-tap 4 corners from scratch"
-                >
-                  <RotateCcw className="w-3 h-3 text-gray-400" />
-                  <span>Re-tap Corners</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleResetToFit}
+                disabled={isLocked}
+                className="flex items-center gap-1 text-xs text-gray-300 hover:text-white bg-gray-800/90 hover:bg-gray-700/90 border border-gray-700/80 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
+                title="Reset corners to extreme outer boundaries"
+              >
+                <Maximize2 className="w-3 h-3 text-gray-400" />
+                <span>Reset to Edges</span>
+              </button>
             </div>
           </div>
 
           {/* ── Image Workspace Canvas ── */}
           <div
             ref={containerRef}
-            onClick={handleCanvasClick}
-            className={`relative flex-1 w-full h-full min-h-0 flex items-center justify-center overflow-visible bg-black rounded-xl select-none ${
-              corners.length < 4 && !isLocked ? "cursor-crosshair" : ""
-            }`}
+            onMouseDown={handleCanvasPointerDown}
+            onTouchStart={handleCanvasPointerDown}
+            className="relative flex-1 w-full h-full min-h-0 flex items-center justify-center overflow-visible bg-black rounded-xl select-none cursor-crosshair touch-none"
           >
             <div className="relative w-full h-full flex items-center justify-center overflow-visible">
               <img
@@ -529,57 +575,39 @@ export default function ImageWorkspace({
                   });
                 };
 
-                // In Stage 1 (less than 4 points), points are just stationary tap markers
-                // In Stage 2 (all 4 points placed), handles become draggable and interactive
-                const isStage2 = corners.length === 4;
-
                 return (
                   <motion.div
                     key={i}
-                    drag={isStage2 && !isLocked}
+                    drag={!isLocked}
                     dragMomentum={false}
                     dragElastic={0}
-                    onDrag={isStage2 ? (_, info) => handleLocalDrag(info) : undefined}
-                    onDragStart={
-                      isStage2
-                        ? () => {
-                            setActiveDragIndex(i);
-                            setLoupe({
-                              visible: true,
-                              x,
-                              y,
-                              naturalX: corner.x,
-                              naturalY: corner.y,
-                              index: i,
-                            });
-                          }
-                        : undefined
-                    }
-                    onDragEnd={
-                      isStage2
-                        ? () => {
-                            setActiveDragIndex(null);
-                            setLoupe((prev) => ({ ...prev, visible: false }));
-                            // Sort once user finishes dragging, ensuring stable final order
-                            setCorners(sortQuadCorners(corners));
-                          }
-                        : undefined
-                    }
+                    onDrag={(_, info) => handleLocalDrag(info)}
+                    onDragStart={() => {
+                      setActiveDragIndex(i);
+                      setLoupe({
+                        visible: true,
+                        x,
+                        y,
+                        naturalX: corner.x,
+                        naturalY: corner.y,
+                        index: i,
+                      });
+                    }}
+                    onDragEnd={() => {
+                      setActiveDragIndex(null);
+                      setLoupe((prev) => ({ ...prev, visible: false }));
+                      // Sort once user finishes dragging, ensuring stable final order
+                      setCorners((prev) => sortQuadCorners(prev));
+                    }}
                     onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                     initial={false}
                     animate={{ x, y }}
                     transition={{ duration: 0 }}
-                    className={`absolute top-0 left-0 w-7 h-7 -ml-3.5 -mt-3.5 rounded-full border-2 border-white pointer-events-auto flex items-center justify-center text-[11px] font-bold text-white select-none ${
-                      isStage2
-                        ? "bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 cursor-grab active:cursor-grabbing shadow-[0_0_15px_rgba(59,130,246,0.6)]"
-                        : "bg-blue-600 shadow-[0_0_10px_rgba(59,130,246,0.8)] animate-in zoom-in-75 duration-150"
-                    }`}
+                    className="absolute top-0 left-0 w-7 h-7 -ml-3.5 -mt-3.5 rounded-full border-2 border-white pointer-events-auto flex items-center justify-center text-[11px] font-bold text-white select-none bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 cursor-grab active:cursor-grabbing shadow-[0_0_15px_rgba(59,130,246,0.6)]"
                     style={{ zIndex: activeDragIndex === i ? 25 : 10 }}
-                    title={
-                      isStage2
-                        ? `${CORNER_LABELS[i] || `Corner ${i + 1}`} (Drag to adjust)`
-                        : `Corner ${i + 1} of 4`
-                    }
+                    title={`${CORNER_LABELS[i] || `Corner ${i + 1}`} (Drag to adjust)`}
                   >
                     {i + 1}
                   </motion.div>
