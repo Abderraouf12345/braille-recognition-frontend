@@ -318,8 +318,8 @@ export default function Dashboard() {
                   {
                     step: "3",
                     icon: "💡",
-                    title: "Set light angle (Recto / Verso separation)",
-                    desc: "This feature is only intended to help distinguish the <strong>recto</strong> (front raised dots) from the <strong>verso</strong> (back indentations) on double-sided Braille documents. It is a basic, non-deterministic heuristic rather than an exact light detector: if selecting an angle (e.g. 0°) incorrectly captures the verso layer, rotating by <strong>180°</strong> will invert the classification to retrieve the recto layer."
+                    title: "Set light angle (Single Consistent Source)",
+                    desc: "The light can come from <strong>any direction</strong> around the page. However, for the shadow-based recognition model to achieve optimal accuracy, the document must be illuminated by <strong>one consistent light source</strong> (avoid diffused multi-directional ceiling lights). If double-sided recto/verso dots appear inverted, rotating this dial by <strong>180°</strong> will swap the classification."
                   },
                   { step: "4", icon: "🌐", title: "Choose a language &amp; translate", desc: "Select your target language and click Extract &amp; Translate. Results appear in real time." },
                   { step: "5", icon: "🔊", title: "Listen, copy or download", desc: "Use the audio player to hear the translation read aloud, copy it to your clipboard, or download it as a text file." },
