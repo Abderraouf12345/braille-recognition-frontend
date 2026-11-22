@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Sun } from "lucide-react";
+import { Sun, Info } from "lucide-react";
 
 interface LightDialProps {
   angle: number;
@@ -71,7 +71,12 @@ export default function LightDial({ angle, setAngle }: LightDialProps) {
 
   return (
     <div className="bg-gray-800 p-3 sm:p-4 lg:p-[1.8vh] rounded-2xl flex flex-col items-center justify-center border border-gray-700 shadow-xl shrink-0">
-      <h3 className="text-gray-300 font-medium text-xs sm:text-sm mb-2 sm:mb-3 lg:mb-[1.5vh]">Light Direction</h3>
+      <div className="w-full flex items-center justify-between mb-2 sm:mb-2.5">
+        <h3 className="text-gray-300 font-medium text-xs sm:text-sm">Light Direction</h3>
+        <span className="text-[10px] text-blue-400 bg-blue-950/70 border border-blue-500/30 px-2 py-0.5 rounded-full font-medium">
+          Single Light Source
+        </span>
+      </div>
       
       <div 
         ref={dialRef}
@@ -96,8 +101,16 @@ export default function LightDial({ angle, setAngle }: LightDialProps) {
         </div>
       </div>
       
-      <div className="mt-2 sm:mt-3 lg:mt-[1.2vh] text-lg sm:text-xl lg:text-2xl font-bold text-blue-400 font-mono">
+      <div className="mt-2 text-lg sm:text-xl font-bold text-blue-400 font-mono">
         {angle}°
+      </div>
+
+      {/* Clear Guidance Banner */}
+      <div className="mt-2 w-full bg-gray-900/80 border border-gray-700/80 rounded-xl p-2 sm:p-2.5 text-center flex items-start gap-1.5 text-left">
+        <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+        <p className="text-[11px] leading-tight text-gray-300">
+          Light can come from <span className="text-white font-medium">any angle</span>, but must be from <strong className="text-amber-300 font-semibold">one consistent direction</strong> for accurate dot shadow detection.
+        </p>
       </div>
     </div>
   );
