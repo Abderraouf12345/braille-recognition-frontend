@@ -6,7 +6,6 @@ import {
   Upload,
   Loader2,
   Maximize2,
-  Check,
 } from "lucide-react";
 import { optimizeImageForUpload } from "../utils/imageCompressor";
 
@@ -422,31 +421,18 @@ export default function ImageWorkspace({
         </div>
       ) : (
         <div className="flex-1 flex flex-col min-h-0 w-full h-full relative">
-          {/* ── Unified Smart Toolbar ── */}
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 px-1 shrink-0 z-20">
-            {/* Context Status & Helper */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-blue-200 bg-blue-950/70 border border-blue-500/30 px-3 py-1.5 rounded-xl font-medium flex items-center gap-2 shadow-sm">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-300">
-                  Click any section or drag handles to position corners
-                </span>
-              </span>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handleResetToFit}
-                disabled={isLocked}
-                className="flex items-center gap-1 text-xs text-gray-300 hover:text-white bg-gray-800/90 hover:bg-gray-700/90 border border-gray-700/80 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
-                title="Reset corners to extreme outer boundaries"
-              >
-                <Maximize2 className="w-3 h-3 text-gray-400" />
-                <span>Reset to Edges</span>
-              </button>
-            </div>
+          {/* ── Toolbar Actions ── */}
+          <div className="flex items-center justify-end gap-2 mb-2 px-1 shrink-0 z-20">
+            <button
+              type="button"
+              onClick={handleResetToFit}
+              disabled={isLocked}
+              className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-gray-800/90 hover:bg-gray-700/90 border border-gray-700/80 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
+              title="Reset corners to extreme outer boundaries"
+            >
+              <Maximize2 className="w-3.5 h-3.5 text-gray-400" />
+              <span>Reset to Edges</span>
+            </button>
           </div>
 
           {/* ── Image Workspace Canvas ── */}
