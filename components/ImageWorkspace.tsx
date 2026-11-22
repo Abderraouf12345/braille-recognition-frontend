@@ -91,6 +91,9 @@ export default function ImageWorkspace({
   const containerRef = useRef<HTMLDivElement>(null);
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
 
+  // Active dragging index to prevent re-sorting mid-drag
+  const [activeDragIndex, setActiveDragIndex] = useState<number | null>(null);
+
   // Magnifier Loupe State
   const [loupe, setLoupe] = useState<{
     visible: boolean;
@@ -192,16 +195,14 @@ export default function ImageWorkspace({
     // In Stage 1, we start with empty corners so user taps the 4 corners cleanly.
   };
 
-  // Reset to full default margins or clear to tap fresh
+  // Reset to full default margins or clear to tap fresh (Extreme edges of the image)
   const handleResetToFit = () => {
     if (isLocked || imgSize.width === 0) return;
-    const marginX = Math.round(imgSize.width * 0.04);
-    const marginY = Math.round(imgSize.height * 0.04);
     setCorners([
-      { x: marginX, y: marginY },
-      { x: imgSize.width - marginX, y: marginY },
-      { x: imgSize.width - marginX, y: imgSize.height - marginY },
-      { x: marginX, y: imgSize.height - marginY },
+      { x: 0, y: 0 },
+      { x: imgSize.width, y: 0 },
+      { x: imgSize.width, y: imgSize.height },
+      { x: 0, y: imgSize.height },
     ]);
   };
 
@@ -507,12 +508,10 @@ export default function ImageWorkspace({
                   const updatedCorners = [...corners];
                   updatedCorners[i] = { x: newX, y: newY };
 
-                  // If all 4 are present, keep them sorted correctly
-                  if (updatedCorners.length === 4) {
-                    setCorners(sortQuadCorners(updatedCorners));
-                  } else {
-                    setCorners(updatedCorners);
-                  }
+                  // Crucial for smoothness: DO NOT sort while actively dragging!
+                  // Sorting mid-drag changes array indices on the fly, which flips handles under the cursor
+                  // and causes jarring stutter/glitches. Sorting is smoothly applied onDragEnd.
+                  setCorners(updatedCorners);
 
                   // Update Loupe position during drag
                   const currentScreenX =
@@ -539,10 +538,12 @@ export default function ImageWorkspace({
                     key={i}
                     drag={isStage2 && !isLocked}
                     dragMomentum={false}
+                    dragElastic={0}
                     onDrag={isStage2 ? (_, info) => handleLocalDrag(info) : undefined}
                     onDragStart={
                       isStage2
                         ? () => {
+                            setActiveDragIndex(i);
                             setLoupe({
                               visible: true,
                               x,
@@ -557,20 +558,23 @@ export default function ImageWorkspace({
                     onDragEnd={
                       isStage2
                         ? () => {
+                            setActiveDragIndex(null);
                             setLoupe((prev) => ({ ...prev, visible: false }));
+                            // Sort once user finishes dragging, ensuring stable final order
+                            setCorners(sortQuadCorners(corners));
                           }
                         : undefined
                     }
                     onClick={(e) => e.stopPropagation()}
                     initial={false}
                     animate={{ x, y }}
-                    transition={{ type: "tween", duration: 0 }}
-                    className={`absolute top-0 left-0 w-7 h-7 -ml-3.5 -mt-3.5 rounded-full border-2 border-white pointer-events-auto flex items-center justify-center text-[11px] font-bold text-white select-none transition-transform ${
+                    transition={{ duration: 0 }}
+                    className={`absolute top-0 left-0 w-7 h-7 -ml-3.5 -mt-3.5 rounded-full border-2 border-white pointer-events-auto flex items-center justify-center text-[11px] font-bold text-white select-none ${
                       isStage2
-                        ? "bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 cursor-grab active:cursor-grabbing shadow-[0_0_15px_rgba(59,130,246,0.6)] hover:scale-125 active:scale-95"
+                        ? "bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 cursor-grab active:cursor-grabbing shadow-[0_0_15px_rgba(59,130,246,0.6)]"
                         : "bg-blue-600 shadow-[0_0_10px_rgba(59,130,246,0.8)] animate-in zoom-in-75 duration-150"
                     }`}
-                    style={{ zIndex: 10 }}
+                    style={{ zIndex: activeDragIndex === i ? 25 : 10 }}
                     title={
                       isStage2
                         ? `${CORNER_LABELS[i] || `Corner ${i + 1}`} (Drag to adjust)`
