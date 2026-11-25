@@ -8,7 +8,7 @@ import ResultsPanel from "@/components/ResultsPanel";
 import VideoGuideModal from "@/components/VideoGuideModal";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
 import { getOrCreateDeviceId } from "@/lib/clientDevice";
-import { saveUserScanToSupabase } from "@/lib/supabase";
+import { saveUserScanToSupabase, updateScanResultsInSupabase } from "@/lib/supabase";
 
 export default function Dashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -69,13 +69,13 @@ export default function Dashboard() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Asynchronously save the user's scan to Supabase storage for dataset collection
-    saveUserScanToSupabase(uploadFile, {
+    // Asynchronously save the initial scan image & metadata to Supabase
+    let scanSessionPromise = saveUserScanToSupabase(uploadFile, {
       deviceId: getOrCreateDeviceId(),
       language,
       lightAngle,
       corners,
-    }).catch(() => {});
+    });
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("hf.space")
@@ -97,6 +97,8 @@ export default function Dashboard() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let finalBraille = "";
+      let finalTranslation = "";
 
       while (true) {
         const { value, done } = await reader.read();
@@ -115,12 +117,20 @@ export default function Dashboard() {
             if (event.type === "overlay") {
               setOverlayImage(event.value);
             } else if (event.type === "braille") {
+              finalBraille = event.value;
               setResults(prev => ({ ...prev, braille: event.value }));
               setIsProcessing(false); // UI unlocked as soon as braille arrives
             } else if (event.type === "translation") {
+              finalTranslation = event.value;
               setResults(prev => ({ ...prev, arabic: event.value }));
             } else if (event.type === "done") {
               setIsProcessing(false);
+              // Update metadata with final extracted text and translation
+              scanSessionPromise.then((session) => {
+                if (session) {
+                  updateScanResultsInSupabase(session, finalBraille, finalTranslation);
+                }
+              });
             } else if (event.type === "error") {
               setError(event.value);
               setIsProcessing(false);
