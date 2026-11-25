@@ -37,9 +37,14 @@ export async function saveUserScanToSupabase(
     const randomId = Math.random().toString(36).substring(2, 8);
     const fileExt = file.name.split(".").pop() || "jpg";
 
+    // Clean user device directory name: e.g. "users/dev_32ffade6-2a8f-4afd-81f2-9a583c2d7b62"
+    const userFolder = meta.deviceId
+      ? `users/${meta.deviceId.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+      : "users/anonymous";
+
     const baseFileName = `${timestamp}_${randomId}`;
-    const imagePath = `scans/${baseFileName}.${fileExt}`;
-    const metaPath = `metadata/${baseFileName}.json`;
+    const imagePath = `${userFolder}/scans/${baseFileName}.${fileExt}`;
+    const metaPath = `${userFolder}/metadata/${baseFileName}.json`;
 
     // 1. Upload original image to 'braille-uploads' bucket
     const { error: uploadError } = await supabase.storage
