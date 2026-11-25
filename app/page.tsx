@@ -8,6 +8,7 @@ import ResultsPanel from "@/components/ResultsPanel";
 import VideoGuideModal from "@/components/VideoGuideModal";
 import { optimizeImageForUpload } from "@/utils/imageCompressor";
 import { getOrCreateDeviceId } from "@/lib/clientDevice";
+import { saveUserScanToSupabase } from "@/lib/supabase";
 
 export default function Dashboard() {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -67,6 +68,14 @@ export default function Dashboard() {
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+
+    // Asynchronously save the user's scan to Supabase storage for dataset collection
+    saveUserScanToSupabase(uploadFile, {
+      deviceId: getOrCreateDeviceId(),
+      language,
+      lightAngle,
+      corners,
+    }).catch(() => {});
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("hf.space")
