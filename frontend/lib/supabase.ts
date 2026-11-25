@@ -129,17 +129,20 @@ export async function updateScanResultsInSupabase(
       });
 
     // 2. Also save clean readable .txt files directly alongside in results/
+    // Explicitly set UTF-8 charset in contentType header so browsers & Supabase serve it with proper encoding
     const combinedText = `=== BRAILLE OUTPUT ===\n${cleanBraille}\n\n=== TRANSLATION (${session.payload.language || "text"}) ===\n${cleanTranslation}\n`;
 
     const txtPath = `${session.userFolder}/results/${session.baseFileName}.txt`;
-    const txtBlob = new Blob([combinedText], { type: "text/plain;charset=utf-8" });
+    const txtBlob = new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), combinedText], {
+      type: "text/plain;charset=utf-8",
+    });
 
     await supabase.storage
       .from("braille-uploads")
       .upload(txtPath, txtBlob, {
         cacheControl: "3600",
         upsert: true,
-        contentType: "text/plain",
+        contentType: "text/plain; charset=utf-8",
       });
   } catch (err) {
     console.warn("[Supabase] Non-blocking metadata update error:", err);
