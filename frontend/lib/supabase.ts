@@ -20,6 +20,8 @@ export interface ScanUploadMetadata {
 }
 
 export interface ScanSession {
+  userFolder: string;
+  baseFileName: string;
   metaPath: string;
   payload: any;
 }
@@ -60,7 +62,7 @@ export async function saveUserScanToSupabase(
       return null;
     }
 
-    // 2. Upload corresponding scan metadata JSON
+    // 2. Upload initial metadata JSON
     const payload = {
       imagePath,
       fileName: file.name,
@@ -71,8 +73,8 @@ export async function saveUserScanToSupabase(
       lightAngle: meta.lightAngle,
       corners: meta.corners,
       results: {
-        braille: meta.brailleResult || "",
-        translation: meta.translationResult || "",
+        braille: meta.brailleResult ? meta.brailleResult.split("\n") : [],
+        translation: meta.translationResult ? meta.translationResult.split("\n") : [],
       },
     };
 
@@ -88,7 +90,7 @@ export async function saveUserScanToSupabase(
         contentType: "application/json",
       });
 
-    return { metaPath, payload };
+    return { userFolder, baseFileName, metaPath, payload };
   } catch (err) {
     console.warn("[Supabase] Non-blocking scan save error:", err);
     return null;
@@ -96,7 +98,8 @@ export async function saveUserScanToSupabase(
 }
 
 /**
- * Updates the JSON metadata file in Supabase with the final extracted Braille and translation
+ * Updates the JSON metadata file and creates human-readable text files
+ * (result.txt, braille.txt, translation.txt) in the user's folder.
  */
 export async function updateScanResultsInSupabase(
   session: ScanSession,
@@ -104,9 +107,13 @@ export async function updateScanResultsInSupabase(
   translation: string
 ) {
   try {
+    const cleanBraille = braille || "";
+    const cleanTranslation = translation || "";
+
+    // 1. In JSON, format as line-by-line arrays so \n renders cleanly
     session.payload.results = {
-      braille: braille || session.payload.results?.braille || "",
-      translation: translation || session.payload.results?.translation || "",
+      braille: cleanBraille.split("\n"),
+      translation: cleanTranslation.split("\n"),
     };
 
     const updatedBlob = new Blob([JSON.stringify(session.payload, null, 2)], {
@@ -119,6 +126,20 @@ export async function updateScanResultsInSupabase(
         cacheControl: "3600",
         upsert: true, // Overwrites with final results
         contentType: "application/json",
+      });
+
+    // 2. Also save clean readable .txt files directly alongside in results/
+    const combinedText = `=== BRAILLE OUTPUT ===\n${cleanBraille}\n\n=== TRANSLATION (${session.payload.language || "text"}) ===\n${cleanTranslation}\n`;
+
+    const txtPath = `${session.userFolder}/results/${session.baseFileName}.txt`;
+    const txtBlob = new Blob([combinedText], { type: "text/plain;charset=utf-8" });
+
+    await supabase.storage
+      .from("braille-uploads")
+      .upload(txtPath, txtBlob, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: "text/plain",
       });
   } catch (err) {
     console.warn("[Supabase] Non-blocking metadata update error:", err);
