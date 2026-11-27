@@ -64,6 +64,8 @@ interface StatsResponse {
   totalTtsPlays: number;
   totalActiveDevices: number;
   totalVisitorCount: number;
+  humanCount: number;
+  botCount: number;
   countryUniqueVisitors: Record<string, string | number>;
   countryTotalVisits: Record<string, string | number>;
 }
@@ -391,16 +393,9 @@ export default function AdminDashboard() {
     }
   }
 
-  // KPI counts come from the stats endpoint (atomic Redis counters — always reflect ALL users)
-  const humanCount = useMemo(() => {
-    if (!visitorsData?.visitors) return 0;
-    return visitorsData.visitors.filter((v) => classifyVisitor(v).isHuman).length;
-  }, [visitorsData?.visitors]);
-
-  const botCount = useMemo(() => {
-    if (!visitorsData?.visitors) return 0;
-    return visitorsData.visitors.filter((v) => !classifyVisitor(v).isHuman).length;
-  }, [visitorsData?.visitors]);
+  // Global database-wide human and bot counts from stats endpoint (Redis atomic counters — always reflect ALL users)
+  const humanCount = stats?.humanCount ?? 0;
+  const botCount   = stats?.botCount ?? 0;
 
   // Server-side pagination: visitors already filtered & paginated by API
   const paginatedVisitors = visitorsData?.visitors ?? [];
@@ -849,7 +844,7 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <span>👤</span>
-                  <span>Humans ({humanCount})</span>
+                  <span>Humans ({humanCount.toLocaleString()})</span>
                 </button>
                 <button
                   type="button"
@@ -861,7 +856,7 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <span>🤖</span>
-                  <span>Bots ({botCount})</span>
+                  <span>Bots ({botCount.toLocaleString()})</span>
                 </button>
               </div>
 
