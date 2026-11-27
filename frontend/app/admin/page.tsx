@@ -10,7 +10,6 @@ import {
   Activity,
   Search,
   RefreshCw,
-  Download,
   ShieldCheck,
   KeyRound,
   ArrowLeft,
@@ -333,59 +332,6 @@ export default function AdminDashboard() {
     fetchStats(adminKey.trim());
   }
 
-  function handleExportCsv() {
-    if (!visitorsData?.visitors?.length) return;
-
-    const headers = [
-      "Device ID",
-      "Traffic Classification",
-      "Is Real Human",
-      "Current IP",
-      "Previous IPs History",
-      "Browser",
-      "Operating System",
-      "Country Name",
-      "Country Code",
-      "City",
-      "Region",
-      "Visits",
-      "First Seen",
-      "Last Seen",
-      "User Agent",
-    ];
-    const rows = visitorsData.visitors.map((v) => {
-      const cDetails = getCountryDetails(v.country);
-      const cls = classifyVisitor(v);
-      return [
-        `"${v.deviceId || ""}"`,
-        `"${cls.label.replace(/"/g, '""')}"`,
-        `"${cls.isHuman ? "Yes" : "No"}"`,
-        `"${v.ip || ""}"`,
-        `"${(v.previousIps || v.ip || "").replace(/"/g, '""')}"`,
-        `"${getBrowserDisplay(v).replace(/"/g, '""')}"`,
-        `"${getOsDisplay(v).replace(/"/g, '""')}"`,
-        `"${cDetails.name.replace(/"/g, '""')}"`,
-        `"${(v.country || "Unknown").replace(/"/g, '""')}"`,
-        `"${(v.city || "Unknown").replace(/"/g, '""')}"`,
-        `"${(v.region || "").replace(/"/g, '""')}"`,
-        `"${v.visits || 1}"`,
-        `"${v.firstSeen || ""}"`,
-        `"${v.lastSeen || ""}"`,
-        `"${(v.userAgent || "").replace(/"/g, '""')}"`,
-      ];
-    });
-
-    const csvContent =
-      "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `braille_visitors_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
   async function handleResetDatabase() {
     const confirmed = window.confirm(
       "Are you sure you want to reset the database?\n\nThis will permanently clear all visitor logs and start fresh with clean test data."
@@ -559,14 +505,6 @@ export default function AdminDashboard() {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
-            </button>
-            <button
-              onClick={handleExportCsv}
-              disabled={!visitorsData?.visitors?.length}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-lg shadow-indigo-600/20"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export CSV
             </button>
             <button
               onClick={handleResetDatabase}
