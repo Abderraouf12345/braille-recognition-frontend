@@ -37,6 +37,7 @@ interface VisitorRecord {
   lastSeen?: string;
   lastHeartbeat?: string | number;
   totalDurationSeconds?: string | number;
+  cumulativeDurationSeconds?: string | number;
   firstReferrer?: string;
   firstCampaign?: string;
   referrer?: string;
@@ -926,11 +927,16 @@ export default function AdminDashboard() {
                           </div>
                         </td>
 
-                        {/* Status & Time Spent */}
+                        {/* Status & Time Spent (Current Session + Total Across All Sessions) */}
                         <td className="py-3 px-4">
                           {(() => {
                             const online = isUserOnline(v.lastHeartbeat, v.lastSeen);
-                            const duration = formatDuration(v.totalDurationSeconds);
+                            const sessionDuration = formatDuration(v.totalDurationSeconds);
+                            // Total lifetime time across all sessions (defaults to session duration if cumulative not set yet)
+                            const totalSeconds = Number(v.cumulativeDurationSeconds) || Number(v.totalDurationSeconds) || 0;
+                            const totalLifetime = formatDuration(totalSeconds);
+                            const visitsCount = Number(v.visits) || 1;
+
                             return (
                               <div className="flex flex-col gap-1 items-start">
                                 <span
@@ -947,10 +953,27 @@ export default function AdminDashboard() {
                                   />
                                   <span>{online ? "Online Now" : "Offline"}</span>
                                 </span>
-                                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                                  <Clock className="w-2.5 h-2.5 text-slate-500" />
-                                  <span>{duration} spent</span>
-                                </span>
+
+                                <div className="flex flex-col gap-0.5 text-[10px] text-slate-400 font-mono">
+                                  {/* Current Session Duration */}
+                                  <span
+                                    className="flex items-center gap-1"
+                                    title="Time spent in the current active session"
+                                  >
+                                    <Clock className="w-2.5 h-2.5 text-slate-500" />
+                                    <span>{sessionDuration} this session</span>
+                                  </span>
+
+                                  {/* Cumulative Total Across All Sessions */}
+                                  {visitsCount > 1 && (
+                                    <span
+                                      className="flex items-center gap-1 text-[9px] text-sky-400 font-semibold"
+                                      title={`Accumulated time spent across all ${visitsCount} visits`}
+                                    >
+                                      <span>Σ {totalLifetime} total</span>
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             );
                           })()}
