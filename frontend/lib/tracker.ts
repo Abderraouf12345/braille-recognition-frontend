@@ -39,7 +39,11 @@ export function extractDeviceId(headers: Headers, deviceIdOverride?: string | nu
  * Records visitor Device ID, IP address, and Vercel edge geolocation permanently in Upstash Redis.
  * Called on page load and on image recognition/processing requests.
  */
-export async function recordVisitor(headers: Headers, deviceIdOverride?: string | null) {
+export async function recordVisitor(
+  headers: Headers,
+  deviceIdOverride?: string | null,
+  extra?: { referrer?: string; campaign?: string }
+) {
   try {
     const redis = getRedis();
     if (!redis) return;
@@ -74,6 +78,9 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
 
     const existing = await redis.hgetall<Record<string, string>>(deviceKey);
 
+    const referrer = extra?.referrer || headers.get("referer") || "Direct";
+    const campaign = extra?.campaign || "";
+
     if (!existing || Object.keys(existing).length === 0) {
       // Brand new physical device / user / browser sandbox
       await redis.hset(deviceKey, {
@@ -89,6 +96,9 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
         userAgent: userAgent.slice(0, 200),
         browser,
         os,
+        referrer,
+        campaign: campaign || "None",
+        totalDurationSeconds: "0",
       });
 
       await redis.hincrby("country_unique_visitors", country, 1);
@@ -112,6 +122,13 @@ export async function recordVisitor(headers: Headers, deviceIdOverride?: string 
         lastSeen: now,
         visits: currentVisits + 1,
       };
+
+      if (referrer && referrer !== "Direct" && (!existing.referrer || existing.referrer === "Direct")) {
+        updateData.referrer = referrer;
+      }
+      if (campaign && (!existing.campaign || existing.campaign === "None")) {
+        updateData.campaign = campaign;
+      }
 
       // Backfill browser and OS if missing or previously Unknown
       if ((!existing.browser || existing.browser === "Unknown") && browser !== "Unknown") {
@@ -213,6 +230,32 @@ export async function recordUserAction(
     await pipeline.exec();
   } catch (error) {
     console.error("[RecordUserAction Error]:", error);
+  }
+}
+
+/**
+ * Records heartbeat ping to maintain real-time online status and session duration.
+ */
+export async function recordHeartbeat(deviceId: string, durationSeconds: number) {
+  try {
+    const redis = getRedis();
+    if (!redis) return;
+
+    const deviceKey = `device:${deviceId}`;
+    const now = new Date().toISOString();
+    const timestamp = Date.now();
+
+    const pipeline = redis.pipeline();
+    pipeline.hset(deviceKey, {
+      lastSeen: now,
+      lastHeartbeat: timestamp.toString(),
+      totalDurationSeconds: durationSeconds.toString(),
+    });
+    pipeline.zadd("devices_by_last_seen", { score: timestamp, member: deviceId });
+
+    await pipeline.exec();
+  } catch (error) {
+    console.error("[RecordHeartbeat Error]:", error);
   }
 }
 
