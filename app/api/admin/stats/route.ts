@@ -20,13 +20,16 @@ export async function GET(request: Request) {
         totalUniqueDevices: 0,
         totalUniqueVisitors: 0,
         totalVisits: 0,
+        totalExtractions: 0,
+        totalTtsPlays: 0,
+        totalActiveDevices: 0,
+        totalVisitorCount: 0,
         countryUniqueVisitors: {},
         countryTotalVisits: {},
-        visitors: [],
       });
     }
 
-    // Retrieve aggregate statistics
+    // --- KPI counters only (all O(1) or O(N) on small hashes) ---
     const [
       totalUniqueDevicesRaw,
       totalUniqueIpsRaw,
@@ -34,10 +37,10 @@ export async function GET(request: Request) {
       totalExtractionsRaw,
       totalTtsPlaysRaw,
       activeActionDevicesRaw,
+      deviceSetCount,
+      legacySetCount,
       countryUnique,
       countryTotal,
-      allDeviceIds,
-      recentIps,
     ] = await Promise.all([
       redis.scard("all_unique_devices"),
       redis.scard("all_unique_ips"),
@@ -45,73 +48,36 @@ export async function GET(request: Request) {
       redis.get<string | number>("total_extractions"),
       redis.get<string | number>("total_tts_plays"),
       redis.scard("active_action_devices"),
+      redis.zcard("devices_by_last_seen"),
+      redis.zcard("visitors_by_last_seen"),
       redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
       redis.hgetall<Record<string, number | string>>("country_total_visits"),
-      // Retrieve up to 1,000 devices sorted by lastSeen descending
-      redis.zrange<string[]>("devices_by_last_seen", 0, 999, { rev: true }),
-      redis.zrange<string[]>("visitors_by_last_seen", 0, 999, { rev: true }),
     ]);
 
     const totalUniqueDevices = Number(totalUniqueDevicesRaw) || 0;
-    const totalUniqueIps = Number(totalUniqueIpsRaw) || 0;
-    const totalVisits = Number(totalVisitsRaw) || 0;
-    const totalExtractions = Number(totalExtractionsRaw) || 0;
-    const totalTtsPlays = Number(totalTtsPlaysRaw) || 0;
-    const totalActiveDevices = Number(activeActionDevicesRaw) || 0;
+    const totalUniqueIps     = Number(totalUniqueIpsRaw)     || 0;
+    const totalVisits        = Number(totalVisitsRaw)        || 0;
+    const totalExtractions   = Number(totalExtractionsRaw)   || 0;
+    const totalTtsPlays      = Number(totalTtsPlaysRaw)      || 0;
+    const totalActiveDevices = Number(activeActionDevicesRaw)|| 0;
 
-    // Fetch device records
-    const visitorsMap = new Map<string, any>();
-
-    if (allDeviceIds && allDeviceIds.length > 0) {
-      const devPipeline = redis.pipeline();
-      for (const devId of allDeviceIds) {
-        devPipeline.hgetall(`device:${devId}`);
-      }
-      const devResults = await devPipeline.exec();
-      devResults.forEach((res: any, idx: number) => {
-        if (res && Object.keys(res).length > 0) {
-          visitorsMap.set(allDeviceIds[idx], res);
-        }
-      });
-    }
-
-    // Also load any legacy IP records that don't have a device record yet
-    if (recentIps && recentIps.length > 0) {
-      const ipPipeline = redis.pipeline();
-      for (const ip of recentIps) {
-        ipPipeline.hgetall(`visitor:${ip}`);
-      }
-      const ipResults = await ipPipeline.exec();
-      ipResults.forEach((res: any, idx: number) => {
-        if (res && Object.keys(res).length > 0) {
-          const ip = recentIps[idx];
-          // If this IP isn't represented by an existing device, add it as a legacy visitor
-          const alreadyCovered = Array.from(visitorsMap.values()).some((v) => v.ip === ip);
-          if (!alreadyCovered) {
-            visitorsMap.set(`legacy_${ip}`, {
-              deviceId: `legacy_${ip}`,
-              ip: ip,
-              previousIps: ip,
-              ...res,
-            });
-          }
-        }
-      });
-    }
-
-    const visitors = Array.from(visitorsMap.values());
+    // Best estimate of total visitor count across both sorted sets
+    const totalVisitorCount = Math.max(
+      totalUniqueDevices,
+      (Number(deviceSetCount) || 0) + (Number(legacySetCount) || 0),
+    );
 
     return NextResponse.json({
       connected: true,
-      totalUniqueDevices: Math.max(totalUniqueDevices, visitors.length),
+      totalUniqueDevices: Math.max(totalUniqueDevices, totalVisitorCount),
       totalUniqueVisitors: totalUniqueIps,
       totalVisits,
       totalExtractions,
       totalTtsPlays,
       totalActiveDevices,
+      totalVisitorCount,
       countryUniqueVisitors: countryUnique || {},
-      countryTotalVisits: countryTotal || {},
-      visitors,
+      countryTotalVisits:    countryTotal  || {},
     });
   } catch (error: any) {
     console.error("Error in /api/admin/stats:", error);
