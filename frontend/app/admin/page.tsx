@@ -997,7 +997,21 @@ export default function AdminDashboard() {
                         {/* Traffic Type Badge */}
                         <td className="py-3 px-4">
                           {(() => {
-                            const cls = classifyVisitor(v);
+                            const hasActions =
+                              Number(v.extractions) > 0 ||
+                              Number(v.tts_plays) > 0 ||
+                              Number(v.copy_count) > 0 ||
+                              Number(v.downloads) > 0;
+                            const cls = hasActions
+                              ? {
+                                  type: "human" as const,
+                                  isHuman: true,
+                                  label: "Active Real User",
+                                  badgeClass: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                                  icon: "👤",
+                                  reason: "Confirmed human visitor — performed interactive Braille actions",
+                                }
+                              : classifyVisitor(v);
                             return (
                               <div className="flex flex-col gap-0.5 items-start">
                                 <span

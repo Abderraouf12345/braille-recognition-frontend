@@ -32,111 +32,99 @@ export async function GET(request: Request) {
       });
     }
 
-    // --- KPI counters only (all O(1) or O(N) on small hashes) ---
+    // 1. Fetch global counters and all registered device IDs
     const [
-      totalUniqueDevicesRaw,
       totalUniqueIpsRaw,
       totalVisitsRaw,
       totalExtractionsRaw,
       totalTtsPlaysRaw,
-      activeActionDevicesRaw,
-      deviceSetCount,
-      legacySetCount,
-      countryUnique,
-      countryTotal,
-      humanDevicesCountRaw,
-      botDevicesCountRaw,
+      allDevIds,
+      activeActionDevsList,
     ] = await Promise.all([
-      redis.scard("all_unique_devices"),
       redis.scard("all_unique_ips"),
       redis.get<string | number>("total_page_visits"),
       redis.get<string | number>("total_extractions"),
       redis.get<string | number>("total_tts_plays"),
-      redis.scard("active_action_devices"),
-      redis.zcard("devices_by_last_seen"),
-      redis.zcard("visitors_by_last_seen"),
-      redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
-      redis.hgetall<Record<string, number | string>>("country_total_visits"),
-      redis.scard("all_human_devices"),
-      redis.scard("all_bot_devices"),
+      // Get all registered physical devices sorted by lastSeen descending
+      redis.zrange<string[]>("devices_by_last_seen", 0, -1, { rev: true }),
+      // Get devices that performed real user actions
+      redis.smembers<string[]>("active_action_devices"),
     ]);
 
-    const totalUniqueDevices = Number(totalUniqueDevicesRaw) || 0;
-    const totalUniqueIps     = Number(totalUniqueIpsRaw)     || 0;
-    const totalVisits        = Number(totalVisitsRaw)        || 0;
-    const totalExtractions   = Number(totalExtractionsRaw)   || 0;
-    const totalTtsPlays      = Number(totalTtsPlaysRaw)      || 0;
-    const totalActiveDevices = Number(activeActionDevicesRaw)|| 0;
-    const numLegacy          = Number(legacySetCount)        || 0;
+    const devIds = allDevIds || [];
+    const totalUniqueDevices = devIds.length;
+    const totalUniqueIps = Number(totalUniqueIpsRaw) || 0;
+    const totalVisits = Number(totalVisitsRaw) || 0;
+    const totalExtractions = Number(totalExtractionsRaw) || 0;
+    const totalTtsPlays = Number(totalTtsPlaysRaw) || 0;
+    const activeSet = new Set<string>(activeActionDevsList || []);
 
-    let humanCount = Number(humanDevicesCountRaw) || 0;
-    let botCount   = Number(botDevicesCountRaw)   || 0;
+    // 2. Fetch full profiles for all registered devices
+    const countryUniqueVisitors: Record<string, number> = {};
+    const countryTotalVisits: Record<string, number> = {};
+    let humanCount = 0;
+    let botCount = 0;
 
-    // Backfill / populate sets if they haven't been created yet or are empty
-    if (humanCount === 0 && botCount === 0 && totalUniqueDevices > 0) {
-      const allDevIds = await redis.smembers<string[]>("all_unique_devices");
-      if (allDevIds && allDevIds.length > 0) {
-        const pipeline = redis.pipeline();
-        for (const devId of allDevIds) {
-          pipeline.hgetall(`device:${devId}`);
-        }
-        const devResults = await pipeline.exec();
-        const humanDevs: string[] = [];
-        const botDevs: string[] = [];
+    if (devIds.length > 0) {
+      const pipeline = redis.pipeline();
+      for (const id of devIds) {
+        pipeline.hgetall(`device:${id}`);
+      }
+      const devResults = await pipeline.exec();
 
-        devResults.forEach((res: any, idx: number) => {
-          const devId = allDevIds[idx];
+      devResults.forEach((res: any, idx: number) => {
+        const devId = devIds[idx];
+        const data = res || {};
+
+        // Action check: if device performed extractions, TTS, copy, or is in activeSet, it is guaranteed Human
+        const hasActions =
+          activeSet.has(devId) ||
+          Number(data.extractions) > 0 ||
+          Number(data.tts_plays) > 0 ||
+          Number(data.copy_count) > 0 ||
+          Number(data.downloads) > 0;
+
+        let isHuman = false;
+        if (hasActions) {
+          isHuman = true;
+        } else {
           const cls = classifyVisitor({
             deviceId: devId,
-            ip: res?.ip,
-            userAgent: res?.userAgent,
-            browser: res?.browser,
-            os: res?.os,
+            ip: data.ip,
+            userAgent: data.userAgent,
+            browser: data.browser,
+            os: data.os,
           });
-          if (cls.isHuman) {
-            humanDevs.push(devId);
-          } else {
-            botDevs.push(devId);
-          }
-        });
-
-        const savePipeline = redis.pipeline();
-        for (const dev of humanDevs) {
-          savePipeline.sadd("all_human_devices", dev);
+          isHuman = cls.isHuman;
         }
-        for (const dev of botDevs) {
-          savePipeline.sadd("all_bot_devices", dev);
-        }
-        await savePipeline.exec();
 
-        humanCount = humanDevs.length;
-        botCount = botDevs.length;
-      }
+        if (isHuman) {
+          humanCount++;
+        } else {
+          botCount++;
+        }
+
+        // Country distribution across the registered devices
+        const country = data.country && data.country !== "Unknown" ? data.country : "Unknown";
+        countryUniqueVisitors[country] = (countryUniqueVisitors[country] || 0) + 1;
+        countryTotalVisits[country] =
+          (countryTotalVisits[country] || 0) + (Number(data.visits) || 1);
+      });
     }
-
-    // Legacy IP-only visitors without JS execution are automated HTTP scanners / bots
-    const totalBotCount = botCount + numLegacy;
-
-    // Best estimate of total visitor count across both sorted sets
-    const totalVisitorCount = Math.max(
-      totalUniqueDevices,
-      (Number(deviceSetCount) || 0) + numLegacy,
-      humanCount + totalBotCount
-    );
 
     return NextResponse.json({
       connected: true,
-      totalUniqueDevices: Math.max(totalUniqueDevices, totalVisitorCount),
+      totalUniqueDevices,
       totalUniqueVisitors: totalUniqueIps,
       totalVisits,
       totalExtractions,
       totalTtsPlays,
-      totalActiveDevices,
-      totalVisitorCount,
+      totalActiveDevices: activeSet.size,
+      totalVisitorCount: totalUniqueDevices,
       humanCount,
-      botCount: totalBotCount,
-      countryUniqueVisitors: countryUnique || {},
-      countryTotalVisits:    countryTotal  || {},
+      botCount,
+      countryUniqueVisitors,
+      countryTotalVisits,
     });
   } catch (error: any) {
     console.error("Error in /api/admin/stats:", error);
