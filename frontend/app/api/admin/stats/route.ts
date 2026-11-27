@@ -100,15 +100,14 @@ export async function GET(request: Request) {
 
         if (isHuman) {
           humanCount++;
+          // Country distribution strictly across REAL HUMAN USERS (bots excluded)
+          const country = data.country && data.country !== "Unknown" ? data.country : "Unknown";
+          countryUniqueVisitors[country] = (countryUniqueVisitors[country] || 0) + 1;
+          countryTotalVisits[country] =
+            (countryTotalVisits[country] || 0) + (Number(data.visits) || 1);
         } else {
           botCount++;
         }
-
-        // Country distribution across the registered devices
-        const country = data.country && data.country !== "Unknown" ? data.country : "Unknown";
-        countryUniqueVisitors[country] = (countryUniqueVisitors[country] || 0) + 1;
-        countryTotalVisits[country] =
-          (countryTotalVisits[country] || 0) + (Number(data.visits) || 1);
       });
     }
 
