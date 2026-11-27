@@ -37,6 +37,8 @@ interface VisitorRecord {
   lastSeen?: string;
   lastHeartbeat?: string | number;
   totalDurationSeconds?: string | number;
+  firstReferrer?: string;
+  firstCampaign?: string;
   referrer?: string;
   campaign?: string;
   visits?: string | number;
@@ -978,30 +980,45 @@ export default function AdminDashboard() {
                           })()}
                         </td>
 
-                        {/* Traffic Source & Campaign */}
+                        {/* Traffic Source & Campaign (Last Non-Direct Touch with First Discovery) */}
                         <td className="py-3 px-4">
                           {(() => {
-                            const ref = getCleanReferrer(v.referrer);
+                            const latestRef = getCleanReferrer(v.referrer);
+                            const firstRef = v.firstReferrer ? getCleanReferrer(v.firstReferrer) : null;
                             const campaign = v.campaign && v.campaign !== "None" ? v.campaign : null;
+                            const firstCamp = v.firstCampaign && v.firstCampaign !== "None" ? v.firstCampaign : null;
+
+                            const hasChangedSource = firstRef && firstRef.label !== latestRef.label;
+
                             return (
                               <div className="flex flex-col gap-0.5">
                                 <span
                                   className={`text-[11px] font-medium truncate max-w-[140px] ${
-                                    ref.isDirect ? "text-slate-400" : "text-indigo-300"
+                                    latestRef.isDirect ? "text-slate-400" : "text-indigo-300"
                                   }`}
-                                  title={v.referrer || "Direct"}
+                                  title={`Latest Non-Direct Source: ${v.referrer || "Direct"}`}
                                 >
-                                  {ref.label}
+                                  {latestRef.label}
                                 </span>
+
                                 {campaign ? (
                                   <span
                                     className="text-[9px] text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1 py-0.5 rounded max-w-[130px] truncate"
-                                    title={`Campaign: ${campaign}`}
+                                    title={`Active Campaign: ${campaign}`}
                                   >
                                     🏷️ {campaign}
                                   </span>
                                 ) : (
                                   <span className="text-[9px] text-slate-600">Organic</span>
+                                )}
+
+                                {hasChangedSource && (
+                                  <span
+                                    className="text-[8.5px] text-slate-500 truncate max-w-[130px]"
+                                    title={`Originally discovered via: ${v.firstReferrer}`}
+                                  >
+                                    via {firstRef.label}
+                                  </span>
                                 )}
                               </div>
                             );

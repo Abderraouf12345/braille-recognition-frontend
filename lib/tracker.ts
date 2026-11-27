@@ -96,6 +96,8 @@ export async function recordVisitor(
         userAgent: userAgent.slice(0, 200),
         browser,
         os,
+        firstReferrer: referrer,
+        firstCampaign: campaign || "None",
         referrer,
         campaign: campaign || "None",
         totalDurationSeconds: "0",
@@ -123,10 +125,22 @@ export async function recordVisitor(
         visits: currentVisits + 1,
       };
 
-      if (referrer && referrer !== "Direct" && (!existing.referrer || existing.referrer === "Direct")) {
+      // --- Last Non-Direct Touch Attribution Model ---
+      // 1. Preserve initial discovery source forever
+      if (!existing.firstReferrer) {
+        updateData.firstReferrer = existing.referrer || referrer;
+      }
+      if (!existing.firstCampaign && existing.campaign) {
+        updateData.firstCampaign = existing.campaign;
+      }
+
+      // 2. Only update latest referrer if the new visit is from an external source (not Direct)
+      if (referrer && referrer !== "Direct") {
         updateData.referrer = referrer;
       }
-      if (campaign && (!existing.campaign || existing.campaign === "None")) {
+
+      // 3. Only update latest campaign if a real campaign tag was provided on this visit
+      if (campaign && campaign !== "None") {
         updateData.campaign = campaign;
       }
 
