@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       activeActionDevicesRaw,
       countryUnique,
       countryTotal,
-      recentDeviceIds,
+      allDeviceIds,
       recentIps,
     ] = await Promise.all([
       redis.scard("all_unique_devices"),
@@ -47,8 +47,9 @@ export async function GET(request: Request) {
       redis.scard("active_action_devices"),
       redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
       redis.hgetall<Record<string, number | string>>("country_total_visits"),
-      redis.zrange<string[]>("devices_by_last_seen", 0, 99, { rev: true }),
-      redis.zrange<string[]>("visitors_by_last_seen", 0, 99, { rev: true }),
+      // Retrieve up to 1,000 devices sorted by lastSeen descending
+      redis.zrange<string[]>("devices_by_last_seen", 0, 999, { rev: true }),
+      redis.zrange<string[]>("visitors_by_last_seen", 0, 999, { rev: true }),
     ]);
 
     const totalUniqueDevices = Number(totalUniqueDevicesRaw) || 0;
@@ -61,15 +62,15 @@ export async function GET(request: Request) {
     // Fetch device records
     const visitorsMap = new Map<string, any>();
 
-    if (recentDeviceIds && recentDeviceIds.length > 0) {
+    if (allDeviceIds && allDeviceIds.length > 0) {
       const devPipeline = redis.pipeline();
-      for (const devId of recentDeviceIds) {
+      for (const devId of allDeviceIds) {
         devPipeline.hgetall(`device:${devId}`);
       }
       const devResults = await devPipeline.exec();
       devResults.forEach((res: any, idx: number) => {
         if (res && Object.keys(res).length > 0) {
-          visitorsMap.set(recentDeviceIds[idx], res);
+          visitorsMap.set(allDeviceIds[idx], res);
         }
       });
     }
