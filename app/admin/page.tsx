@@ -1261,10 +1261,10 @@ export default function AdminDashboard() {
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-white tracking-tight">
-                  Reset All Visitor Intelligence?
+                  Reset All Analytics & Telemetry Data?
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  This is a <strong className="text-rose-400 font-semibold">permanent and irreversible</strong> action.
+                  This action is <strong className="text-rose-400 font-semibold">permanent and irreversible</strong>. All historical records in Redis will be completely wiped.
                 </p>
               </div>
             </div>
@@ -1273,11 +1273,19 @@ export default function AdminDashboard() {
               <div className="font-semibold text-slate-200 flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-rose-400/90">
                 ⚠️ What will be permanently erased:
               </div>
-              <ul className="list-disc list-inside space-y-1 text-slate-400 text-[11px]">
-                <li>All <strong>{stats?.totalUniqueDevices || 0} registered devices</strong> & IP logs</li>
-                <li>All session history, accumulated durations, and timestamps</li>
-                <li>All Braille scan logs & audio play action metrics</li>
-                <li>All country geolocation and traffic source attributions</li>
+              <ul className="list-disc list-inside space-y-1.5 text-slate-300 text-xs">
+                <li>
+                  All <strong>{humanCount.toLocaleString()} verified human users</strong> & {stats?.totalUniqueVisitors.toLocaleString() || 0} network IP logs
+                </li>
+                <li>
+                  All <strong>{(stats?.totalExtractions ?? 0).toLocaleString()} Braille image extractions</strong> & {(stats?.totalTtsPlays ?? 0).toLocaleString()} audio plays
+                </li>
+                <li>
+                  All <strong>{(stats?.totalVisits ?? 0).toLocaleString()} page visits</strong> & accumulated session durations
+                </li>
+                <li>
+                  All geographic footprint data across <strong>{sortedCountries.length} countries</strong> & traffic source attributions
+                </li>
               </ul>
             </div>
 
@@ -1304,7 +1312,7 @@ export default function AdminDashboard() {
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    Yes, Delete Everything
+                    Yes, Reset All Data
                   </>
                 )}
               </button>
