@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { detectBrowser, detectOS, isMobileUA, classifyVisitor } from "@/lib/browserDetect";
 import {
@@ -63,9 +63,17 @@ interface StatsResponse {
   totalExtractions: number;
   totalTtsPlays: number;
   totalActiveDevices: number;
+  totalVisitorCount: number;
   countryUniqueVisitors: Record<string, string | number>;
   countryTotalVisits: Record<string, string | number>;
+}
+
+interface VisitorsResponse {
   visitors: VisitorRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 function formatDuration(secondsRaw?: string | number): string {
@@ -203,17 +211,36 @@ export default function AdminDashboard() {
   const [adminKey, setAdminKey] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [visitorsLoading, setVisitorsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [visitorsData, setVisitorsData] = useState<VisitorsResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [trafficFilter, setTrafficFilter] = useState<"all" | "humans" | "bots">("all");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(50);
 
-  // Reset to page 1 whenever filter or search query changes
+  // Debounce ref for search
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset to page 1 whenever filter or page-size changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, trafficFilter, pageSize]);
+  }, [trafficFilter, pageSize]);
+
+  // Re-fetch visitors whenever page, pageSize, trafficFilter, or searchQuery changes
+  useEffect(() => {
+    if (!isAuthenticated || !adminKey) return;
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    // Debounce search input; fire immediately for non-search changes
+    const delay = searchQuery ? 300 : 0;
+    searchDebounceRef.current = setTimeout(() => {
+      fetchVisitors(adminKey, currentPage, pageSize, trafficFilter, searchQuery);
+    }, delay);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [isAuthenticated, adminKey, currentPage, pageSize, trafficFilter, searchQuery]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -239,17 +266,44 @@ export default function AdminDashboard() {
         setLoading(false);
         return;
       }
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       const data: StatsResponse = await res.json();
       setStats(data);
       setIsAuthenticated(true);
       sessionStorage.setItem("braille_admin_key", keyToUse);
+      // Fetch first page of visitors right after stats load
+      await fetchVisitors(keyToUse, 1, pageSize, trafficFilter, searchQuery);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to load visitor statistics.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchVisitors(
+    keyToUse: string,
+    page: number,
+    size: number,
+    filter: string,
+    search: string,
+  ) {
+    setVisitorsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        key:      keyToUse,
+        page:     String(page),
+        pageSize: String(size),
+        filter,
+        search,
+      });
+      const res = await fetch(`/api/admin/visitors?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const data: VisitorsResponse = await res.json();
+      setVisitorsData(data);
+    } catch (err: any) {
+      console.error("Failed to load visitors:", err.message);
+    } finally {
+      setVisitorsLoading(false);
     }
   }
 
@@ -260,7 +314,7 @@ export default function AdminDashboard() {
   }
 
   function handleExportCsv() {
-    if (!stats || !stats.visitors || stats.visitors.length === 0) return;
+    if (!visitorsData?.visitors?.length) return;
 
     const headers = [
       "Device ID",
@@ -279,7 +333,7 @@ export default function AdminDashboard() {
       "Last Seen",
       "User Agent",
     ];
-    const rows = stats.visitors.map((v) => {
+    const rows = visitorsData.visitors.map((v) => {
       const cDetails = getCountryDetails(v.country);
       const cls = classifyVisitor(v);
       return [
@@ -337,82 +391,23 @@ export default function AdminDashboard() {
     }
   }
 
-  const { humanCount, botCount } = useMemo(() => {
-    if (!stats?.visitors) return { humanCount: 0, botCount: 0 };
-    let humans = 0;
-    let bots = 0;
-    for (const v of stats.visitors) {
-      const cls = classifyVisitor(v);
-      if (cls.isHuman) humans++;
-      else bots++;
-    }
-    return { humanCount: humans, botCount: bots };
-  }, [stats?.visitors]);
+  // KPI counts come from the stats endpoint (atomic Redis counters — always reflect ALL users)
+  const humanCount = useMemo(() => {
+    if (!visitorsData?.visitors) return 0;
+    return visitorsData.visitors.filter((v) => classifyVisitor(v).isHuman).length;
+  }, [visitorsData?.visitors]);
 
-  const filteredVisitors = useMemo(() => {
-    if (!stats?.visitors) return [];
-    let list = stats.visitors;
+  const botCount = useMemo(() => {
+    if (!visitorsData?.visitors) return 0;
+    return visitorsData.visitors.filter((v) => !classifyVisitor(v).isHuman).length;
+  }, [visitorsData?.visitors]);
 
-    if (trafficFilter === "humans") {
-      list = list.filter((v) => classifyVisitor(v).isHuman);
-    } else if (trafficFilter === "bots") {
-      list = list.filter((v) => !classifyVisitor(v).isHuman);
-    }
-
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase().trim();
-    return list.filter((v) => {
-      const cDetails = getCountryDetails(v.country);
-      const cls = classifyVisitor(v);
-      return (
-        (v.ip && v.ip.toLowerCase().includes(q)) ||
-        (v.deviceId && v.deviceId.toLowerCase().includes(q)) ||
-        (v.previousIps && v.previousIps.toLowerCase().includes(q)) ||
-        (v.country && v.country.toLowerCase().includes(q)) ||
-        cDetails.name.toLowerCase().includes(q) ||
-        (v.city && v.city.toLowerCase().includes(q)) ||
-        getBrowserDisplay(v).toLowerCase().includes(q) ||
-        getOsDisplay(v).toLowerCase().includes(q) ||
-        cls.label.toLowerCase().includes(q) ||
-        cls.reason.toLowerCase().includes(q)
-      );
-    });
-  }, [stats?.visitors, trafficFilter, searchQuery]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredVisitors.length / pageSize));
-
-  const paginatedVisitors = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredVisitors.slice(start, start + pageSize);
-  }, [filteredVisitors, currentPage, pageSize]);
+  // Server-side pagination: visitors already filtered & paginated by API
+  const paginatedVisitors = visitorsData?.visitors ?? [];
+  const totalPages        = visitorsData?.totalPages ?? 1;
+  const totalFiltered     = visitorsData?.total ?? 0;
 
   const sortedCountries = useMemo(() => {
-    if (stats?.visitors && stats.visitors.length > 0) {
-      const counts: Record<string, { count: number; totalVisits: number }> = {};
-      const sourceList =
-        trafficFilter === "bots"
-          ? stats.visitors.filter((v) => !classifyVisitor(v).isHuman)
-          : trafficFilter === "humans"
-          ? stats.visitors.filter((v) => classifyVisitor(v).isHuman)
-          : stats.visitors;
-
-      for (const v of sourceList) {
-        const c = v.country && v.country !== "Unknown" ? v.country : "Unknown";
-        if (!counts[c]) {
-          counts[c] = { count: 0, totalVisits: 0 };
-        }
-        counts[c].count += 1;
-        counts[c].totalVisits += Number(v.visits) || 1;
-      }
-      return Object.entries(counts)
-        .map(([country, data]) => ({
-          country,
-          count: data.count,
-          totalVisits: data.totalVisits,
-        }))
-        .sort((a, b) => b.count - a.count);
-    }
-
     if (!stats?.countryUniqueVisitors) return [];
     return Object.entries(stats.countryUniqueVisitors)
       .map(([country, count]) => ({
@@ -421,7 +416,7 @@ export default function AdminDashboard() {
         totalVisits: Number(stats.countryTotalVisits?.[country]) || Number(count),
       }))
       .sort((a, b) => b.count - a.count);
-  }, [stats?.visitors, stats?.countryUniqueVisitors, stats?.countryTotalVisits, trafficFilter]);
+  }, [stats?.countryUniqueVisitors, stats?.countryTotalVisits]);
 
   const totalCountryUsers = useMemo(() => {
     return sortedCountries.reduce((sum, item) => sum + item.count, 0) || 1;
@@ -545,7 +540,7 @@ export default function AdminDashboard() {
 
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => fetchStats(adminKey)}
+              onClick={() => { setCurrentPage(1); fetchStats(adminKey); }}
               disabled={loading}
               className="px-3.5 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 text-xs font-medium rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
             >
@@ -554,7 +549,7 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={handleExportCsv}
-              disabled={!stats?.visitors?.length}
+              disabled={!visitorsData?.visitors?.length}
               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-lg shadow-indigo-600/20"
             >
               <Download className="w-3.5 h-3.5" />
@@ -822,7 +817,9 @@ export default function AdminDashboard() {
                 Persistent Visitor & Device Records
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Showing {filteredVisitors.length} of {stats?.visitors?.length || 0} recorded visitors
+                {visitorsLoading
+                  ? "Loading…"
+                  : `Showing ${paginatedVisitors.length} of ${totalFiltered.toLocaleString()} visitors`}
                 {trafficFilter === "humans" && " (Real humans only)"}
                 {trafficFilter === "bots" && " (Bots & scanners only)"}
               </p>
@@ -840,7 +837,7 @@ export default function AdminDashboard() {
                       : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  All ({stats?.visitors?.length || 0})
+                  All ({stats?.totalVisitorCount?.toLocaleString() ?? 0})
                 </button>
                 <button
                   type="button"
@@ -899,7 +896,14 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
-                {filteredVisitors.length === 0 ? (
+                {visitorsLoading ? (
+                  <tr>
+                    <td colSpan={11} className="py-8 text-center text-slate-500 text-xs">
+                      <RefreshCw className="w-4 h-4 animate-spin inline mr-2 text-indigo-400" />
+                      Loading visitors…
+                    </td>
+                  </tr>
+                ) : paginatedVisitors.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="py-8 text-center text-slate-500 text-xs">
                       {loading
@@ -1217,7 +1221,7 @@ export default function AdminDashboard() {
             </table>
 
             {/* Pagination Controls */}
-            {filteredVisitors.length > 0 && (
+            {totalFiltered > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-slate-800/60 bg-slate-950/40">
                 {/* Page size selector */}
                 <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -1239,8 +1243,8 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span>
                     {(currentPage - 1) * pageSize + 1}–
-                    {Math.min(currentPage * pageSize, filteredVisitors.length)}{" "}
-                    of {filteredVisitors.length} users
+                    {Math.min(currentPage * pageSize, totalFiltered)}{" "}
+                    of {totalFiltered.toLocaleString()} users
                   </span>
                   <div className="flex items-center gap-1">
                     <button
