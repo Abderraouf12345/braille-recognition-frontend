@@ -1032,8 +1032,8 @@ export default function AdminDashboard() {
                                   <span>{isActive ? "Active User" : "Passive Visitor"}</span>
                                 </span>
 
-                                {/* Direct Link to user's scans in Supabase */}
-                                {cleanDevId && (
+                                {/* Direct Link to user's scans in Supabase (shown only if user has extractions) */}
+                                {extractions > 0 && cleanDevId && (
                                   <a
                                     href={`https://supabase.com/dashboard/project/dihqttparfhiodwppsco/storage/files/buckets/braille-uploads?path=users%2F${encodeURIComponent(
                                       cleanDevId
@@ -1044,7 +1044,7 @@ export default function AdminDashboard() {
                                     title="Open this user's uploaded images and metadata directly in Supabase"
                                   >
                                     <Folder className="w-3 h-3 text-blue-400" />
-                                    <span>View Scans</span>
+                                    <span>View Scans ({extractions})</span>
                                     <ExternalLink className="w-2.5 h-2.5 text-blue-400" />
                                   </a>
                                 )}
