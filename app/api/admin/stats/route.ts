@@ -33,11 +33,10 @@ export async function GET(request: Request) {
     // --- Pagination params ---
     const page     = Math.max(1, parseInt(searchParams.get("page")     || "1",  10));
     const pageSize = Math.max(1, Math.min(250, parseInt(searchParams.get("pageSize") || "50", 10)));
-    // zrange offset: 0-based index into the sorted set
     const zStart = (page - 1) * pageSize;
     const zEnd   = zStart + pageSize - 1;
 
-    // --- Aggregate KPI stats (always full counts, independent of page) ---
+    // --- Step 1: Get total counts for KPIs + both sorted set sizes ---
     const [
       totalUniqueDevicesRaw,
       totalUniqueIpsRaw,
@@ -47,9 +46,8 @@ export async function GET(request: Request) {
       activeActionDevicesRaw,
       countryUnique,
       countryTotal,
-      totalDeviceSetCount,  // zcard = exact count of items in sorted set
-      pageDeviceIds,        // only the IDs for this page
-      recentIps,            // legacy IP visitors (kept for backwards compat)
+      deviceSetCount,   // zcard of devices_by_last_seen
+      legacySetCount,   // zcard of visitors_by_last_seen
     ] = await Promise.all([
       redis.scard("all_unique_devices"),
       redis.scard("all_unique_ips"),
@@ -60,26 +58,37 @@ export async function GET(request: Request) {
       redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
       redis.hgetall<Record<string, number | string>>("country_total_visits"),
       redis.zcard("devices_by_last_seen"),
-      // Fetch only the slice for this page
-      redis.zrange<string[]>("devices_by_last_seen", zStart, zEnd, { rev: true }),
-      // Legacy IPs: only fetch on page 1 so they appear first; cap at pageSize
-      page === 1
-        ? redis.zrange<string[]>("visitors_by_last_seen", 0, pageSize - 1, { rev: true })
-        : Promise.resolve([] as string[]),
+      redis.zcard("visitors_by_last_seen"),
     ]);
 
-    const totalUniqueDevices  = Number(totalUniqueDevicesRaw)  || 0;
-    const totalUniqueIps      = Number(totalUniqueIpsRaw)      || 0;
-    const totalVisits         = Number(totalVisitsRaw)         || 0;
-    const totalExtractions    = Number(totalExtractionsRaw)    || 0;
-    const totalTtsPlays       = Number(totalTtsPlaysRaw)       || 0;
-    const totalActiveDevices  = Number(activeActionDevicesRaw) || 0;
-    // Total visitor count for pagination: use the sorted set cardinality
-    const totalVisitorCount   = Number(totalDeviceSetCount)    || totalUniqueDevices;
-    const totalPages          = Math.max(1, Math.ceil(totalVisitorCount / pageSize));
+    const totalUniqueDevices = Number(totalUniqueDevicesRaw) || 0;
+    const totalUniqueIps     = Number(totalUniqueIpsRaw)     || 0;
+    const totalVisits        = Number(totalVisitsRaw)        || 0;
+    const totalExtractions   = Number(totalExtractionsRaw)   || 0;
+    const totalTtsPlays      = Number(totalTtsPlaysRaw)      || 0;
+    const totalActiveDevices = Number(activeActionDevicesRaw)|| 0;
 
-    // --- Fetch device records for this page only ---
+    // --- Step 2: Determine unified total ---
+    // We use the LARGER of: Redis all_unique_devices scard vs devices sorted-set size.
+    // Legacy-only users (IP-only, no device fingerprint) live in visitors_by_last_seen
+    // but may already overlap with device records. We use all_unique_devices as the
+    // authoritative total since it's kept in sync by the tracker for every user type.
+    const totalVisitorCount = Math.max(
+      totalUniqueDevices,
+      Number(deviceSetCount) || 0,
+    );
+    const totalPages = Math.max(1, Math.ceil(totalVisitorCount / pageSize));
+
+    // --- Step 3: Fetch the page slice of device records ---
     const visitorsMap = new Map<string, any>();
+
+    const [pageDeviceIds, allLegacyIps] = await Promise.all([
+      redis.zrange<string[]>("devices_by_last_seen", zStart, zEnd, { rev: true }),
+      // Always load ALL legacy IPs so we can deduplicate properly and paginate them too
+      Number(legacySetCount) > 0
+        ? redis.zrange<string[]>("visitors_by_last_seen", 0, Number(legacySetCount) - 1, { rev: true })
+        : Promise.resolve([] as string[]),
+    ]);
 
     if (pageDeviceIds && pageDeviceIds.length > 0) {
       const devPipeline = redis.pipeline();
@@ -94,42 +103,73 @@ export async function GET(request: Request) {
       });
     }
 
-    // Legacy IP records (page 1 only)
-    if (recentIps && recentIps.length > 0) {
+    // --- Step 4: Collect legacy IP-only users (not covered by any device record) ---
+    // Build a set of IPs already covered by device records so deduplication is O(1)
+    const coveredIps = new Set<string>(
+      Array.from(visitorsMap.values()).map((v) => v.ip).filter(Boolean)
+    );
+
+    // Find all legacy-only IPs (across the entire set, not just page 1)
+    const legacyOnlyIps = (allLegacyIps || []).filter((ip) => !coveredIps.has(ip));
+
+    // Paginate legacy users: they form a secondary list appended after device users.
+    // The device records fill positions 0..(deviceSetCount-1) across all pages,
+    // then legacy-only records extend those pages.
+    // Simple approach: fetch ALL legacy records upfront (they're typically few),
+    // then append only the ones belonging to this page's slot.
+    const devicePageCount = pageDeviceIds?.length ?? 0;
+    const remainingSlots  = pageSize - devicePageCount; // slots left on this page after devices
+
+    // Determine which legacy-only IPs fall on this page.
+    // Legacy users are ordered after all device-pages, so their global index starts
+    // at deviceSetCount. We compute which ones belong to this page's window.
+    const legacyGlobalStart = (page - 1) * pageSize;             // global start of this page
+    const deviceSetSize     = Number(deviceSetCount) || 0;
+    // Index into legacyOnlyIps array for this page
+    const legacyLocalStart  = Math.max(0, legacyGlobalStart - deviceSetSize);
+    const legacyLocalEnd    = legacyLocalStart + remainingSlots;
+    const legacyIpsForPage  = legacyOnlyIps.slice(legacyLocalStart, legacyLocalEnd);
+
+    if (legacyIpsForPage.length > 0) {
       const ipPipeline = redis.pipeline();
-      for (const ip of recentIps) {
+      for (const ip of legacyIpsForPage) {
         ipPipeline.hgetall(`visitor:${ip}`);
       }
       const ipResults = await ipPipeline.exec();
       ipResults.forEach((res: any, idx: number) => {
         if (res && Object.keys(res).length > 0) {
-          const ip = recentIps[idx];
-          const alreadyCovered = Array.from(visitorsMap.values()).some((v) => v.ip === ip);
-          if (!alreadyCovered) {
-            visitorsMap.set(`legacy_${ip}`, {
-              deviceId: `legacy_${ip}`,
-              ip,
-              previousIps: ip,
-              ...res,
-            });
-          }
+          const ip = legacyIpsForPage[idx];
+          visitorsMap.set(`legacy_${ip}`, {
+            deviceId: `legacy_${ip}`,
+            ip,
+            previousIps: ip,
+            ...res,
+          });
         }
       });
     }
 
     const visitors = Array.from(visitorsMap.values());
 
+    // The real total includes both device-fingerprinted users AND legacy-IP-only users.
+    // legacyOnlyIps.length gives the number of users NOT already covered by a device record.
+    const realTotal = Math.max(
+      totalUniqueDevices,
+      Number(deviceSetCount) + legacyOnlyIps.length,
+    );
+    const realTotalPages = Math.max(1, Math.ceil(realTotal / pageSize));
+
     return NextResponse.json({
       connected: true,
-      totalUniqueDevices: Math.max(totalUniqueDevices, totalVisitorCount),
+      totalUniqueDevices: Math.max(totalUniqueDevices, realTotal),
       totalUniqueVisitors: totalUniqueIps,
       totalVisits,
       totalExtractions,
       totalTtsPlays,
       totalActiveDevices,
       // Pagination metadata
-      totalVisitorCount,
-      totalPages,
+      totalVisitorCount: realTotal,
+      totalPages: realTotalPages,
       currentPage: page,
       pageSize,
       countryUniqueVisitors: countryUnique || {},
