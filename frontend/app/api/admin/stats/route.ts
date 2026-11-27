@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRedis } from "@/lib/redis";
+import { classifyVisitor } from "@/lib/browserDetect";
 
 export async function GET(request: Request) {
   try {
@@ -24,6 +25,8 @@ export async function GET(request: Request) {
         totalTtsPlays: 0,
         totalActiveDevices: 0,
         totalVisitorCount: 0,
+        humanCount: 0,
+        botCount: 0,
         countryUniqueVisitors: {},
         countryTotalVisits: {},
       });
@@ -41,6 +44,8 @@ export async function GET(request: Request) {
       legacySetCount,
       countryUnique,
       countryTotal,
+      humanDevicesCountRaw,
+      botDevicesCountRaw,
     ] = await Promise.all([
       redis.scard("all_unique_devices"),
       redis.scard("all_unique_ips"),
@@ -52,6 +57,8 @@ export async function GET(request: Request) {
       redis.zcard("visitors_by_last_seen"),
       redis.hgetall<Record<string, number | string>>("country_unique_visitors"),
       redis.hgetall<Record<string, number | string>>("country_total_visits"),
+      redis.scard("all_human_devices"),
+      redis.scard("all_bot_devices"),
     ]);
 
     const totalUniqueDevices = Number(totalUniqueDevicesRaw) || 0;
@@ -60,11 +67,61 @@ export async function GET(request: Request) {
     const totalExtractions   = Number(totalExtractionsRaw)   || 0;
     const totalTtsPlays      = Number(totalTtsPlaysRaw)      || 0;
     const totalActiveDevices = Number(activeActionDevicesRaw)|| 0;
+    const numLegacy          = Number(legacySetCount)        || 0;
+
+    let humanCount = Number(humanDevicesCountRaw) || 0;
+    let botCount   = Number(botDevicesCountRaw)   || 0;
+
+    // Backfill / populate sets if they haven't been created yet or are empty
+    if (humanCount === 0 && botCount === 0 && totalUniqueDevices > 0) {
+      const allDevIds = await redis.smembers<string[]>("all_unique_devices");
+      if (allDevIds && allDevIds.length > 0) {
+        const pipeline = redis.pipeline();
+        for (const devId of allDevIds) {
+          pipeline.hgetall(`device:${devId}`);
+        }
+        const devResults = await pipeline.exec();
+        const humanDevs: string[] = [];
+        const botDevs: string[] = [];
+
+        devResults.forEach((res: any, idx: number) => {
+          const devId = allDevIds[idx];
+          const cls = classifyVisitor({
+            deviceId: devId,
+            ip: res?.ip,
+            userAgent: res?.userAgent,
+            browser: res?.browser,
+            os: res?.os,
+          });
+          if (cls.isHuman) {
+            humanDevs.push(devId);
+          } else {
+            botDevs.push(devId);
+          }
+        });
+
+        const savePipeline = redis.pipeline();
+        for (const dev of humanDevs) {
+          savePipeline.sadd("all_human_devices", dev);
+        }
+        for (const dev of botDevs) {
+          savePipeline.sadd("all_bot_devices", dev);
+        }
+        await savePipeline.exec();
+
+        humanCount = humanDevs.length;
+        botCount = botDevs.length;
+      }
+    }
+
+    // Legacy IP-only visitors without JS execution are automated HTTP scanners / bots
+    const totalBotCount = botCount + numLegacy;
 
     // Best estimate of total visitor count across both sorted sets
     const totalVisitorCount = Math.max(
       totalUniqueDevices,
-      (Number(deviceSetCount) || 0) + (Number(legacySetCount) || 0),
+      (Number(deviceSetCount) || 0) + numLegacy,
+      humanCount + totalBotCount
     );
 
     return NextResponse.json({
@@ -76,6 +133,8 @@ export async function GET(request: Request) {
       totalTtsPlays,
       totalActiveDevices,
       totalVisitorCount,
+      humanCount,
+      botCount: totalBotCount,
       countryUniqueVisitors: countryUnique || {},
       countryTotalVisits:    countryTotal  || {},
     });

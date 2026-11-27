@@ -1,5 +1,5 @@
 import { getRedis } from "@/lib/redis";
-import { detectBrowser, detectOS } from "@/lib/browserDetect";
+import { detectBrowser, detectOS, classifyVisitor } from "@/lib/browserDetect";
 
 /**
  * Parses cookies from header string
@@ -72,6 +72,22 @@ export async function recordVisitor(
     const isNewDevice = await redis.sadd("all_unique_devices", deviceId);
     await redis.sadd("all_unique_ips", clientIp);
     await redis.incr("total_page_visits");
+
+    // Classify visitor to maintain persistent human/bot sets in Redis
+    const classification = classifyVisitor({
+      deviceId,
+      ip: clientIp,
+      userAgent,
+      browser,
+      os,
+    });
+    if (classification.isHuman) {
+      await redis.sadd("all_human_devices", deviceId);
+      await redis.srem("all_bot_devices", deviceId);
+    } else {
+      await redis.sadd("all_bot_devices", deviceId);
+      await redis.srem("all_human_devices", deviceId);
+    }
 
     // 5. Manage Device Profile in Redis (Each device ID is strictly isolated)
     const deviceKey = `device:${deviceId}`;
@@ -220,8 +236,10 @@ export async function recordUserAction(
       pipeline.incr("total_tts_plays");
     }
 
-    // 2. Mark this device as active in action devices set
+    // 2. Mark this device as active in action devices set (guarantees human status)
     pipeline.sadd("active_action_devices", deviceId);
+    pipeline.sadd("all_human_devices", deviceId);
+    pipeline.srem("all_bot_devices", deviceId);
 
     // 3. Increment per-device action counters (snake_case matches admin dashboard reading)
     if (action === "extraction") {
