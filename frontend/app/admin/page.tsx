@@ -24,6 +24,8 @@ import {
   Trash2,
   Folder,
   Radio,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 interface VisitorRecord {
@@ -205,6 +207,13 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [trafficFilter, setTrafficFilter] = useState<"all" | "humans" | "bots">("all");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+
+  // Reset to page 1 whenever filter or search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, trafficFilter, pageSize]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -369,6 +378,13 @@ export default function AdminDashboard() {
       );
     });
   }, [stats?.visitors, trafficFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredVisitors.length / pageSize));
+
+  const paginatedVisitors = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredVisitors.slice(start, start + pageSize);
+  }, [filteredVisitors, currentPage, pageSize]);
 
   const sortedCountries = useMemo(() => {
     if (stats?.visitors && stats.visitors.length > 0) {
@@ -894,7 +910,7 @@ export default function AdminDashboard() {
                     </td>
                   </tr>
                 ) : (
-                  filteredVisitors.map((v, i) => {
+                  paginatedVisitors.map((v, i) => {
                     const mobile = isMobile(v.userAgent);
                     const prevIps = (v.previousIps || "")
                       .split(",")
@@ -1199,6 +1215,59 @@ export default function AdminDashboard() {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            {filteredVisitors.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-slate-800/60 bg-slate-950/40">
+                {/* Page size selector */}
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-indigo-500"
+                  >
+                    {[25, 50, 100, 250].map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Page info + prev/next */}
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>
+                    {(currentPage - 1) * pageSize + 1}–
+                    {Math.min(currentPage * pageSize, filteredVisitors.length)}{" "}
+                    of {filteredVisitors.length} users
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.max(1, p - 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="p-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 font-mono text-slate-200">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.min(totalPages, p + 1))
+                      }
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
