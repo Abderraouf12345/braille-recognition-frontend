@@ -410,8 +410,8 @@ export default function AdminDashboard() {
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white">Admin Dashboard</h1>
-              <p className="text-xs text-slate-400">Persistent Device & IP Intelligence</p>
+              <h1 className="text-xl font-bold tracking-tight text-white">Braille Analytics Portal</h1>
+              <p className="text-xs text-slate-400">Secure Administrative Intelligence Console</p>
             </div>
           </div>
 
@@ -484,13 +484,13 @@ export default function AdminDashboard() {
               </Link>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-                  Visitor Intelligence
+                  Visitor & Analytics Intelligence
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
-                    Persistent Device + IP
+                    Real-Time Telemetry
                   </span>
                 </h1>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Tracks physical devices permanently across Wi-Fi restarts, 4G switching, and IP changes
+                  Live device tracking, multi-session engagement, geographic reach & translation analytics
                 </p>
               </div>
             </div>
@@ -553,7 +553,7 @@ export default function AdminDashboard() {
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Real Human Users
+                Unique Human Users
               </span>
               <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
                 <Users className="w-4 h-4" />
@@ -569,15 +569,15 @@ export default function AdminDashboard() {
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
               {botCount > 0
-                ? `${botCount} cloud probes & scanners isolated`
-                : "Genuine physical user devices"}
+                ? `${botCount} automated bots & scanners isolated`
+                : "Verified interactive human visitors"}
             </p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Public Network IPs
+                Unique Network IPs
               </span>
               <div className="p-2 bg-purple-500/10 text-purple-400 rounded-xl">
                 <Network className="w-4 h-4" />
@@ -586,7 +586,7 @@ export default function AdminDashboard() {
             <div className="text-3xl font-extrabold text-white tracking-tight">
               {stats?.totalUniqueVisitors.toLocaleString() || 0}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Distinct Wi-Fi/4G IP connections seen</p>
+            <p className="text-[11px] text-slate-400 mt-1">Distinct residential, cellular & network connections</p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
@@ -601,7 +601,7 @@ export default function AdminDashboard() {
             <div className="text-3xl font-extrabold text-white tracking-tight">
               {stats?.totalVisits.toLocaleString() || 0}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Total page loads & image translations</p>
+            <p className="text-[11px] text-slate-400 mt-1">Total page impressions & tool interactions recorded</p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden">
@@ -616,7 +616,7 @@ export default function AdminDashboard() {
             <div className="text-3xl font-extrabold text-white tracking-tight">
               {sortedCountries.length}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Worldwide geographic coverage</p>
+            <p className="text-[11px] text-slate-400 mt-1">Worldwide geographic footprint of verified visitors</p>
           </div>
         </div>
 
@@ -636,7 +636,7 @@ export default function AdminDashboard() {
             <div className="text-3xl font-extrabold text-amber-300 tracking-tight">
               {(stats?.totalExtractions ?? 0).toLocaleString()}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Images processed via Extract button</p>
+            <p className="text-[11px] text-slate-400 mt-1">Images processed via Extract translation button</p>
           </div>
 
           {/* Total Audio Plays */}
@@ -644,7 +644,7 @@ export default function AdminDashboard() {
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent pointer-events-none" />
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Audio Plays
+                Text-to-Speech Plays
               </span>
               <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl text-lg leading-none">
                 🔊
@@ -653,7 +653,7 @@ export default function AdminDashboard() {
             <div className="text-3xl font-extrabold text-indigo-300 tracking-tight">
               {(stats?.totalTtsPlays ?? 0).toLocaleString()}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">TTS audio translations played</p>
+            <p className="text-[11px] text-slate-400 mt-1">Spoken audio translations generated & listened</p>
           </div>
 
           {/* Engagement Rate */}
@@ -661,7 +661,7 @@ export default function AdminDashboard() {
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none" />
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Engagement Rate
+                User Conversion Rate
               </span>
               <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl text-lg leading-none">
                 📈
@@ -673,7 +673,7 @@ export default function AdminDashboard() {
                 : "—"}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              {stats?.totalActiveDevices ?? 0} of {humanCount} real users performed an action
+              {stats?.totalActiveDevices ?? 0} of {humanCount} human users performed a translation action
             </p>
             {humanCount > 0 && (
               <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -694,10 +694,10 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between mb-3.5">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                 <Globe className="w-4 h-4 text-sky-400" />
-                Top Visiting Countries
+                Global Audience Distribution
               </h2>
               <span className="text-[11px] text-slate-400">
-                Total classified users: <strong className="text-slate-200">{totalCountryUsers}</strong>
+                Verified human audience: <strong className="text-slate-200">{totalCountryUsers}</strong>
               </span>
             </div>
 
@@ -764,12 +764,12 @@ export default function AdminDashboard() {
             <div>
               <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Users className="w-4 h-4 text-indigo-400" />
-                Persistent Visitor & Device Records
+                Live Visitor & Device Telemetry
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 {visitorsLoading
-                  ? "Loading…"
-                  : `Showing ${paginatedVisitors.length} of ${totalFiltered.toLocaleString()} visitors`}
+                  ? "Loading records…"
+                  : `Showing ${paginatedVisitors.length} of ${totalFiltered.toLocaleString()} visitor records`}
                 {trafficFilter === "humans" && " (Real humans only)"}
                 {trafficFilter === "bots" && " (Bots & scanners only)"}
               </p>
@@ -799,7 +799,7 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <span>👤</span>
-                  <span>Humans ({humanCount.toLocaleString()})</span>
+                  <span>Real Users ({humanCount.toLocaleString()})</span>
                 </button>
                 <button
                   type="button"
@@ -811,7 +811,7 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <span>🤖</span>
-                  <span>Bots ({botCount.toLocaleString()})</span>
+                  <span>Bots & Scanners ({botCount.toLocaleString()})</span>
                 </button>
               </div>
 
@@ -819,7 +819,7 @@ export default function AdminDashboard() {
                 <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search by IP, Device, Country, or Bot..."
+                  placeholder="Search by IP, Device ID, Country, Browser, or OS..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -832,17 +832,17 @@ export default function AdminDashboard() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800/80 uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="py-3 px-4 font-semibold">Device & Identity</th>
-                  <th className="py-3 px-4 font-semibold">Status & Time Spent</th>
-                  <th className="py-3 px-4 font-semibold">Traffic Type</th>
-                  <th className="py-3 px-4 font-semibold">Traffic Source</th>
-                  <th className="py-3 px-4 font-semibold">Activity & Scans</th>
+                  <th className="py-3 px-4 font-semibold">Device & Client</th>
+                  <th className="py-3 px-4 font-semibold">Status & Session Duration</th>
+                  <th className="py-3 px-4 font-semibold">Traffic Category</th>
+                  <th className="py-3 px-4 font-semibold">Acquisition Source</th>
+                  <th className="py-3 px-4 font-semibold">Translation Activity</th>
                   <th className="py-3 px-4 font-semibold">Current IP & Network History</th>
                   <th className="py-3 px-4 font-semibold">Browser & OS</th>
-                  <th className="py-3 px-4 font-semibold">Location</th>
-                  <th className="py-3 px-4 font-semibold">Visits</th>
-                  <th className="py-3 px-4 font-semibold">First Seen</th>
-                  <th className="py-3 px-4 font-semibold">Last Seen</th>
+                  <th className="py-3 px-4 font-semibold">Geolocation</th>
+                  <th className="py-3 px-4 font-semibold">Sessions</th>
+                  <th className="py-3 px-4 font-semibold">First Discovery</th>
+                  <th className="py-3 px-4 font-semibold">Last Active</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
