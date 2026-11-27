@@ -248,9 +248,14 @@ export async function recordUserAction(
 }
 
 /**
- * Records heartbeat ping to maintain real-time online status and session duration.
+ * Records heartbeat ping to maintain real-time online status, current session duration,
+ * and lifetime cumulative time spent across all sessions.
  */
-export async function recordHeartbeat(deviceId: string, durationSeconds: number) {
+export async function recordHeartbeat(
+  deviceId: string,
+  sessionDurationSeconds: number,
+  deltaSeconds: number = 25
+) {
   try {
     const redis = getRedis();
     if (!redis) return;
@@ -263,8 +268,10 @@ export async function recordHeartbeat(deviceId: string, durationSeconds: number)
     pipeline.hset(deviceKey, {
       lastSeen: now,
       lastHeartbeat: timestamp.toString(),
-      totalDurationSeconds: durationSeconds.toString(),
+      totalDurationSeconds: sessionDurationSeconds.toString(), // Current session duration
     });
+    // Atomically increment cumulative lifetime seconds spent across all sessions
+    pipeline.hincrby(deviceKey, "cumulativeDurationSeconds", deltaSeconds);
     pipeline.zadd("devices_by_last_seen", { score: timestamp, member: deviceId });
 
     await pipeline.exec();
