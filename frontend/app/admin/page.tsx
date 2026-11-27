@@ -63,6 +63,11 @@ interface StatsResponse {
   totalExtractions: number;
   totalTtsPlays: number;
   totalActiveDevices: number;
+  // Server-side pagination metadata
+  totalVisitorCount: number;
+  totalPages: number;
+  currentPage: number;
+  pageSize: number;
   countryUniqueVisitors: Record<string, string | number>;
   countryTotalVisits: Record<string, string | number>;
   visitors: VisitorRecord[];
@@ -215,6 +220,14 @@ export default function AdminDashboard() {
     setCurrentPage(1);
   }, [searchQuery, trafficFilter, pageSize]);
 
+  // Re-fetch visitors from server whenever page or pageSize changes (server-side pagination)
+  useEffect(() => {
+    if (isAuthenticated && adminKey) {
+      fetchStats(adminKey, currentPage, pageSize);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, isAuthenticated]);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -228,11 +241,13 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  async function fetchStats(keyToUse: string) {
+  async function fetchStats(keyToUse: string, page = currentPage, size = pageSize) {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await fetch(`/api/admin/stats?key=${encodeURIComponent(keyToUse)}`);
+      const res = await fetch(
+        `/api/admin/stats?key=${encodeURIComponent(keyToUse)}&page=${page}&pageSize=${size}`
+      );
       if (res.status === 401) {
         setIsAuthenticated(false);
         setErrorMsg("Incorrect Admin Key. Please check the passcode and try again.");
@@ -244,6 +259,7 @@ export default function AdminDashboard() {
       }
       const data: StatsResponse = await res.json();
       setStats(data);
+      setCurrentPage(data.currentPage ?? page);
       setIsAuthenticated(true);
       sessionStorage.setItem("braille_admin_key", keyToUse);
     } catch (err: any) {
@@ -349,6 +365,22 @@ export default function AdminDashboard() {
     return { humanCount: humans, botCount: bots };
   }, [stats?.visitors]);
 
+  // KPI-level human/bot estimates: scale the page sample to the total user count
+  // This keeps the KPI cards accurate even when only one page of visitors is loaded.
+  const kpiHumanCount = useMemo(() => {
+    const total = stats?.totalVisitorCount ?? 0;
+    if (!total || !stats?.visitors?.length) return stats?.totalUniqueDevices ?? 0;
+    const pageHumanRatio = humanCount / stats.visitors.length;
+    return Math.round(pageHumanRatio * total);
+  }, [humanCount, stats?.visitors, stats?.totalVisitorCount, stats?.totalUniqueDevices]);
+
+  const kpiBotCount = useMemo(() => {
+    const total = stats?.totalVisitorCount ?? 0;
+    if (!total || !stats?.visitors?.length) return 0;
+    const pageBotRatio = botCount / stats.visitors.length;
+    return Math.round(pageBotRatio * total);
+  }, [botCount, stats?.visitors, stats?.totalVisitorCount]);
+
   const filteredVisitors = useMemo(() => {
     if (!stats?.visitors) return [];
     let list = stats.visitors;
@@ -379,12 +411,12 @@ export default function AdminDashboard() {
     });
   }, [stats?.visitors, trafficFilter, searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredVisitors.length / pageSize));
+  // Server-side pagination: totalPages comes from the API response
+  const totalPages = stats?.totalPages ?? 1;
+  const totalVisitorCount = stats?.totalVisitorCount ?? filteredVisitors.length;
 
-  const paginatedVisitors = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredVisitors.slice(start, start + pageSize);
-  }, [filteredVisitors, currentPage, pageSize]);
+  // paginatedVisitors = filteredVisitors (already the correct page from the server)
+  const paginatedVisitors = filteredVisitors;
 
   const sortedCountries = useMemo(() => {
     if (stats?.visitors && stats.visitors.length > 0) {
@@ -615,16 +647,16 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="text-3xl font-extrabold text-white tracking-tight flex items-baseline gap-2">
-              <span>{humanCount.toLocaleString()}</span>
-              {botCount > 0 && (
+              <span>{kpiHumanCount.toLocaleString()}</span>
+              {kpiBotCount > 0 && (
                 <span className="text-xs font-semibold text-purple-400 px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20">
-                  +{botCount} bots
+                  +{kpiBotCount} bots
                 </span>
               )}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              {botCount > 0
-                ? `${botCount} cloud probes & scanners isolated`
+              {kpiBotCount > 0
+                ? `${kpiBotCount} cloud probes & scanners isolated`
                 : "Genuine physical user devices"}
             </p>
           </div>
@@ -723,19 +755,19 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="text-3xl font-extrabold text-emerald-300 tracking-tight">
-              {humanCount > 0
-                ? `${Math.round(((stats?.totalActiveDevices ?? 0) / humanCount) * 100)}%`
+              {kpiHumanCount > 0
+                ? `${Math.round(((stats?.totalActiveDevices ?? 0) / kpiHumanCount) * 100)}%`
                 : "—"}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              {stats?.totalActiveDevices ?? 0} of {humanCount} real users performed an action
+              {stats?.totalActiveDevices ?? 0} of {kpiHumanCount} real users performed an action
             </p>
-            {humanCount > 0 && (
+            {kpiHumanCount > 0 && (
               <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-emerald-500 rounded-full transition-all duration-700"
                   style={{
-                    width: `${Math.min(100, Math.round(((stats?.totalActiveDevices ?? 0) / humanCount) * 100))}%`,
+                    width: `${Math.min(100, Math.round(((stats?.totalActiveDevices ?? 0) / kpiHumanCount) * 100))}%`,
                   }}
                 />
               </div>
@@ -1217,7 +1249,7 @@ export default function AdminDashboard() {
             </table>
 
             {/* Pagination Controls */}
-            {filteredVisitors.length > 0 && (
+            {totalVisitorCount > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-slate-800/60 bg-slate-950/40">
                 {/* Page size selector */}
                 <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -1225,7 +1257,8 @@ export default function AdminDashboard() {
                   <select
                     value={pageSize}
                     onChange={(e) => setPageSize(Number(e.target.value))}
-                    className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-indigo-500"
+                    disabled={loading}
+                    className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                   >
                     {[25, 50, 100, 250].map((size) => (
                       <option key={size} value={size}>
@@ -1238,16 +1271,22 @@ export default function AdminDashboard() {
                 {/* Page info + prev/next */}
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span>
-                    {(currentPage - 1) * pageSize + 1}–
-                    {Math.min(currentPage * pageSize, filteredVisitors.length)}{" "}
-                    of {filteredVisitors.length} users
+                    {loading ? (
+                      <span className="text-indigo-400 animate-pulse">Loading…</span>
+                    ) : (
+                      <>
+                        {(currentPage - 1) * pageSize + 1}–
+                        {Math.min(currentPage * pageSize, totalVisitorCount)}{" "}
+                        of{" "}
+                        <span className="font-semibold text-slate-200">{totalVisitorCount}</span>{" "}
+                        users
+                      </>
+                    )}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() =>
-                        setCurrentPage((p) => Math.max(1, p - 1))
-                      }
-                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1 || loading}
                       className="p-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" />
@@ -1256,10 +1295,8 @@ export default function AdminDashboard() {
                       {currentPage} / {totalPages}
                     </span>
                     <button
-                      onClick={() =>
-                        setCurrentPage((p) => Math.min(totalPages, p + 1))
-                      }
-                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages || loading}
                       className="p-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       <ChevronRight className="w-3.5 h-3.5" />
