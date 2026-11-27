@@ -23,34 +23,24 @@ export async function GET(request: Request) {
     const search   = (searchParams.get("search")   || "").toLowerCase().trim();
     const filter   = (searchParams.get("filter")   || "all") as "all" | "humans" | "bots";
 
-    // --- Step 1: Get total counts for pagination math ---
-    const [deviceSetCount, legacySetCount] = await Promise.all([
-      redis.zcard("devices_by_last_seen"),
-      redis.zcard("visitors_by_last_seen"),
-    ]);
-
-    const totalDevices = Number(deviceSetCount) || 0;
-    const totalLegacy  = Number(legacySetCount)  || 0;
+    // --- Step 1: Get total count of registered devices ---
+    const totalDevices = (await redis.zcard("devices_by_last_seen")) || 0;
 
     // --- Step 2: Determine which ID slice to fetch ---
-    // When searching or filtering we need a broader scan; otherwise use exact offset.
-    // For search/filter: load up to 2000 candidates and filter in-memory.
-    // For plain pagination: load only the page slice (fast path).
+    // If filter or search is active, we scan all registered devices in-memory
+    // Otherwise, fast-path slice for the exact page requested
     const needsBroadScan = search.length > 0 || filter !== "all";
-    const scanLimit = needsBroadScan ? 4999 : pageSize - 1; // 0-based end index for exact page
-
-    // --- Step 3: Fetch device IDs for this window ---
     const zStart = needsBroadScan ? 0 : (page - 1) * pageSize;
-    const zEnd   = needsBroadScan ? scanLimit : zStart + pageSize - 1;
+    const zEnd   = needsBroadScan ? -1 : zStart + pageSize - 1;
 
-    const [pageDeviceIds, allLegacyIps] = await Promise.all([
+    const [pageDeviceIds, activeActionDevsList] = await Promise.all([
       redis.zrange<string[]>("devices_by_last_seen", zStart, zEnd, { rev: true }),
-      totalLegacy > 0
-        ? redis.zrange<string[]>("visitors_by_last_seen", 0, Math.min(scanLimit, totalLegacy - 1), { rev: true })
-        : Promise.resolve([] as string[]),
+      redis.smembers<string[]>("active_action_devices"),
     ]);
 
-    // --- Step 4: Fetch full records for device IDs ---
+    const activeSet = new Set<string>(activeActionDevsList || []);
+
+    // --- Step 3: Fetch full records for device IDs ---
     const visitorsMap = new Map<string, any>();
 
     if (pageDeviceIds && pageDeviceIds.length > 0) {
@@ -66,40 +56,30 @@ export async function GET(request: Request) {
       });
     }
 
-    // --- Step 5: Append legacy IP-only visitors ---
-    const coveredIps = new Set<string>(
-      Array.from(visitorsMap.values()).map((v) => v.ip).filter(Boolean)
-    );
-    const legacyOnlyIps = (allLegacyIps || []).filter((ip) => !coveredIps.has(ip));
-
-    if (legacyOnlyIps.length > 0) {
-      const ipPipeline = redis.pipeline();
-      for (const ip of legacyOnlyIps) {
-        ipPipeline.hgetall(`visitor:${ip}`);
-      }
-      const ipResults = await ipPipeline.exec();
-      ipResults.forEach((res: any, idx: number) => {
-        if (res && Object.keys(res).length > 0) {
-          const ip = legacyOnlyIps[idx];
-          visitorsMap.set(`legacy_${ip}`, {
-            deviceId:    `legacy_${ip}`,
-            ip,
-            previousIps: ip,
-            ...res,
-          });
-        }
-      });
-    }
-
     let visitors = Array.from(visitorsMap.values());
 
-    // --- Step 6: Apply search & filter in-memory (only on the scanned window) ---
+    // Helper to determine if a visitor is human
+    const isRecordHuman = (v: any) => {
+      if (
+        activeSet.has(v.deviceId) ||
+        Number(v.extractions) > 0 ||
+        Number(v.tts_plays) > 0 ||
+        Number(v.copy_count) > 0 ||
+        Number(v.downloads) > 0
+      ) {
+        return true;
+      }
+      return classifyVisitor(v).isHuman;
+    };
+
+    // --- Step 4: Apply filter ---
     if (filter === "humans") {
-      visitors = visitors.filter((v) => classifyVisitor(v).isHuman);
+      visitors = visitors.filter((v) => isRecordHuman(v));
     } else if (filter === "bots") {
-      visitors = visitors.filter((v) => !classifyVisitor(v).isHuman);
+      visitors = visitors.filter((v) => !isRecordHuman(v));
     }
 
+    // --- Step 5: Apply search ---
     if (search) {
       visitors = visitors.filter((v) => {
         const country = (v.country || "").toLowerCase();
@@ -126,8 +106,8 @@ export async function GET(request: Request) {
       });
     }
 
-    // --- Step 7: Paginate the filtered result (only needed for broad-scan path) ---
-    const filteredTotal = needsBroadScan ? visitors.length : totalDevices + legacyOnlyIps.length;
+    // --- Step 6: Paginate the result ---
+    const filteredTotal = needsBroadScan ? visitors.length : totalDevices;
     const totalPages    = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
     if (needsBroadScan) {
