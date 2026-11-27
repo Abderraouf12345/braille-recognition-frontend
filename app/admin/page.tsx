@@ -22,6 +22,8 @@ import {
   Network,
   History,
   Trash2,
+  Folder,
+  Radio,
 } from "lucide-react";
 
 interface VisitorRecord {
@@ -33,6 +35,10 @@ interface VisitorRecord {
   region?: string;
   firstSeen?: string;
   lastSeen?: string;
+  lastHeartbeat?: string | number;
+  totalDurationSeconds?: string | number;
+  referrer?: string;
+  campaign?: string;
   visits?: string | number;
   userAgent?: string;
   browser?: string;
@@ -55,6 +61,37 @@ interface StatsResponse {
   countryUniqueVisitors: Record<string, string | number>;
   countryTotalVisits: Record<string, string | number>;
   visitors: VisitorRecord[];
+}
+
+function formatDuration(secondsRaw?: string | number): string {
+  const sec = Number(secondsRaw) || 0;
+  if (sec < 60) return `${sec}s`;
+  const mins = Math.floor(sec / 60);
+  const remainingSec = sec % 60;
+  return `${mins}m ${remainingSec}s`;
+}
+
+function isUserOnline(lastHeartbeat?: string | number, lastSeen?: string): boolean {
+  const now = Date.now();
+  if (lastHeartbeat) {
+    const hb = Number(lastHeartbeat);
+    if (!isNaN(hb) && now - hb < 65000) return true; // active within last 65 seconds
+  }
+  if (lastSeen) {
+    const ls = new Date(lastSeen).getTime();
+    if (!isNaN(ls) && now - ls < 65000) return true;
+  }
+  return false;
+}
+
+function getCleanReferrer(ref?: string): { label: string; isDirect: boolean } {
+  if (!ref || ref === "Direct") return { label: "Direct", isDirect: true };
+  try {
+    const parsed = new URL(ref);
+    return { label: parsed.hostname.replace(/^www\./, ""), isDirect: false };
+  } catch {
+    return { label: ref, isDirect: false };
+  }
 }
 
 function getBrowserDisplay(v: VisitorRecord): string {
@@ -830,8 +867,10 @@ export default function AdminDashboard() {
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800/80 uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-3 px-4 font-semibold">Device & Identity</th>
+                  <th className="py-3 px-4 font-semibold">Status & Time Spent</th>
                   <th className="py-3 px-4 font-semibold">Traffic Type</th>
-                  <th className="py-3 px-4 font-semibold">Activity</th>
+                  <th className="py-3 px-4 font-semibold">Traffic Source</th>
+                  <th className="py-3 px-4 font-semibold">Activity & Scans</th>
                   <th className="py-3 px-4 font-semibold">Current IP & Network History</th>
                   <th className="py-3 px-4 font-semibold">Browser & OS</th>
                   <th className="py-3 px-4 font-semibold">Location</th>
@@ -843,7 +882,7 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-800/40 text-slate-300">
                 {filteredVisitors.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-slate-500 text-xs">
+                    <td colSpan={11} className="py-8 text-center text-slate-500 text-xs">
                       {loading
                         ? "Loading visitor data..."
                         : searchQuery
@@ -885,6 +924,36 @@ export default function AdminDashboard() {
                           </div>
                         </td>
 
+                        {/* Status & Time Spent */}
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const online = isUserOnline(v.lastHeartbeat, v.lastSeen);
+                            const duration = formatDuration(v.totalDurationSeconds);
+                            return (
+                              <div className="flex flex-col gap-1 items-start">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                    online
+                                      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 animate-pulse"
+                                      : "bg-slate-800/60 text-slate-400 border-slate-700/50"
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      online ? "bg-emerald-400" : "bg-slate-500"
+                                    }`}
+                                  />
+                                  <span>{online ? "Online Now" : "Offline"}</span>
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5 text-slate-500" />
+                                  <span>{duration} spent</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+
                         {/* Traffic Type Badge */}
                         <td className="py-3 px-4">
                           {(() => {
@@ -909,7 +978,37 @@ export default function AdminDashboard() {
                           })()}
                         </td>
 
-                        {/* Activity Badge */}
+                        {/* Traffic Source & Campaign */}
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const ref = getCleanReferrer(v.referrer);
+                            const campaign = v.campaign && v.campaign !== "None" ? v.campaign : null;
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <span
+                                  className={`text-[11px] font-medium truncate max-w-[140px] ${
+                                    ref.isDirect ? "text-slate-400" : "text-indigo-300"
+                                  }`}
+                                  title={v.referrer || "Direct"}
+                                >
+                                  {ref.label}
+                                </span>
+                                {campaign ? (
+                                  <span
+                                    className="text-[9px] text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1 py-0.5 rounded max-w-[130px] truncate"
+                                    title={`Campaign: ${campaign}`}
+                                  >
+                                    🏷️ {campaign}
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] text-slate-600">Organic</span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
+
+                        {/* Activity Badge & Direct Supabase Link */}
                         <td className="py-3 px-4">
                           {(() => {
                             const extractions = Number(v.extractions) || 0;
@@ -918,8 +1017,10 @@ export default function AdminDashboard() {
                             const downloads = Number(v.downloads) || 0;
                             const totalActions = extractions + ttsPlays + copies + downloads;
                             const isActive = totalActions > 0;
+                            const cleanDevId = v.deviceId?.replace(/[^a-zA-Z0-9_-]/g, "_");
+
                             return (
-                              <div className="flex flex-col gap-1">
+                              <div className="flex flex-col gap-1.5 items-start">
                                 <span
                                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                                     isActive
@@ -930,6 +1031,24 @@ export default function AdminDashboard() {
                                   <span>{isActive ? "⚡" : "👁️"}</span>
                                   <span>{isActive ? "Active User" : "Passive Visitor"}</span>
                                 </span>
+
+                                {/* Direct Link to user's scans in Supabase */}
+                                {cleanDevId && (
+                                  <a
+                                    href={`https://supabase.com/dashboard/project/dihqttparfhiodwppsco/storage/files/buckets/braille-uploads?path=users%2F${encodeURIComponent(
+                                      cleanDevId
+                                    )}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 transition-all hover:scale-105"
+                                    title="Open this user's uploaded images and metadata directly in Supabase"
+                                  >
+                                    <Folder className="w-3 h-3 text-blue-400" />
+                                    <span>View Scans</span>
+                                    <ExternalLink className="w-2.5 h-2.5 text-blue-400" />
+                                  </a>
+                                )}
+
                                 {isActive && (
                                   <div className="flex flex-col gap-0.5 text-[9px] text-slate-400">
                                     {extractions > 0 && (
@@ -945,9 +1064,6 @@ export default function AdminDashboard() {
                                       <span>⬇️ {downloads} download{downloads !== 1 ? "s" : ""}</span>
                                     )}
                                   </div>
-                                )}
-                                {!isActive && (
-                                  <span className="text-[9px] text-slate-600">Viewed page only · 0 actions</span>
                                 )}
                               </div>
                             );
