@@ -10,8 +10,29 @@ export function VisitorTracker() {
     // Generate or retrieve permanent device ID
     const deviceId = getOrCreateDeviceId();
 
-    // Capture referrer and UTM campaign info
-    const referrer = typeof document !== "undefined" ? document.referrer || "Direct" : "Direct";
+    // Capture referrer (filtering out internal self-referrals from our own domain)
+    const rawReferrer = typeof document !== "undefined" ? document.referrer : "";
+    let referrer = "Direct";
+    if (rawReferrer) {
+      try {
+        const refUrl = new URL(rawReferrer);
+        const currentHost = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+        const refHost = refUrl.hostname.toLowerCase();
+        const isInternal =
+          refHost === currentHost ||
+          refHost.endsWith(".braille-recognition.com") ||
+          refHost === "braille-recognition.com" ||
+          refHost.includes("localhost") ||
+          refHost.includes("127.0.0.1") ||
+          refHost.endsWith(".vercel.app");
+
+        if (!isInternal) {
+          referrer = rawReferrer;
+        }
+      } catch {
+        referrer = "Direct";
+      }
+    }
     const searchParams = typeof window !== "undefined" ? window.location.search : "";
     const urlParams = new URLSearchParams(searchParams);
     const utmSource = urlParams.get("utm_source") || "";

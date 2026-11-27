@@ -11,6 +11,31 @@ function parseCookie(cookieHeader: string | null, key: string): string | null {
 }
 
 /**
+ * Checks if a referrer string originates from our own domain / internal navigation
+ */
+function isInternalReferrer(ref?: string): boolean {
+  if (!ref || ref === "Direct") return true;
+  try {
+    const url = new URL(ref);
+    const host = url.hostname.toLowerCase();
+    return (
+      host === "braille-recognition.com" ||
+      host.endsWith(".braille-recognition.com") ||
+      host.includes("localhost") ||
+      host.includes("127.0.0.1") ||
+      host.endsWith(".vercel.app")
+    );
+  } catch {
+    const lower = ref.toLowerCase();
+    return (
+      lower.includes("braille-recognition") ||
+      lower.includes("localhost") ||
+      lower.includes("vercel.app")
+    );
+  }
+}
+
+/**
  * Extracts client IP address from headers
  */
 export function extractClientIp(headers: Headers): string {
@@ -94,7 +119,9 @@ export async function recordVisitor(
 
     const existing = await redis.hgetall<Record<string, string>>(deviceKey);
 
-    const referrer = extra?.referrer || headers.get("referer") || "Direct";
+    const rawReferrer = extra?.referrer || headers.get("referer") || "Direct";
+    const isInternal = isInternalReferrer(rawReferrer);
+    const referrer = isInternal ? "Direct" : rawReferrer;
     const campaign = extra?.campaign || "";
 
     if (!existing || Object.keys(existing).length === 0) {
@@ -142,17 +169,24 @@ export async function recordVisitor(
       };
 
       // --- Last Non-Direct Touch Attribution Model ---
-      // 1. Preserve initial discovery source forever
-      if (!existing.firstReferrer) {
-        updateData.firstReferrer = existing.referrer || referrer;
+      // 1. Preserve initial discovery source forever (clean out old internal self-referrals)
+      if (!existing.firstReferrer || isInternalReferrer(existing.firstReferrer)) {
+        if (!isInternal) {
+          updateData.firstReferrer = referrer;
+        } else if (!existing.firstReferrer) {
+          updateData.firstReferrer = "Direct";
+        }
       }
-      if (!existing.firstCampaign && existing.campaign) {
-        updateData.firstCampaign = existing.campaign;
+      if (!existing.firstCampaign && campaign && campaign !== "None") {
+        updateData.firstCampaign = campaign;
       }
 
-      // 2. Only update latest referrer if the new visit is from an external source (not Direct)
-      if (referrer && referrer !== "Direct") {
+      // 2. Only update latest referrer if the new visit is from an external source (not Direct and not internal)
+      if (!isInternal && referrer !== "Direct") {
         updateData.referrer = referrer;
+      } else if (existing.referrer && isInternalReferrer(existing.referrer)) {
+        // Automatically clean up old self-referral records in Redis
+        updateData.referrer = "Direct";
       }
 
       // 3. Only update latest campaign if a real campaign tag was provided on this visit

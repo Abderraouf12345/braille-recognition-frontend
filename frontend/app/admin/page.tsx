@@ -103,8 +103,26 @@ function getCleanReferrer(ref?: string): { label: string; isDirect: boolean } {
   if (!ref || ref === "Direct") return { label: "Direct", isDirect: true };
   try {
     const parsed = new URL(ref);
-    return { label: parsed.hostname.replace(/^www\./, ""), isDirect: false };
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (
+      host === "braille-recognition.com" ||
+      host.endsWith(".braille-recognition.com") ||
+      host.includes("localhost") ||
+      host.includes("127.0.0.1") ||
+      host.endsWith(".vercel.app")
+    ) {
+      return { label: "Direct", isDirect: true };
+    }
+    return { label: host, isDirect: false };
   } catch {
+    const lower = ref.toLowerCase();
+    if (
+      lower.includes("braille-recognition") ||
+      lower.includes("localhost") ||
+      lower.includes("vercel.app")
+    ) {
+      return { label: "Direct", isDirect: true };
+    }
     return { label: ref, isDirect: false };
   }
 }
@@ -1040,17 +1058,28 @@ export default function AdminDashboard() {
                             const campaign = v.campaign && v.campaign !== "None" ? v.campaign : null;
                             const firstCamp = v.firstCampaign && v.firstCampaign !== "None" ? v.firstCampaign : null;
 
-                            const hasChangedSource = firstRef && firstRef.label !== latestRef.label;
+                            // Attribution model:
+                            // If current touch is Direct, but user originally arrived via external source (e.g. Google),
+                            // display their real discovery source.
+                            let primaryRef = latestRef;
+                            let secondaryNotice: string | null = null;
+
+                            if (latestRef.isDirect && firstRef && !firstRef.isDirect) {
+                              primaryRef = firstRef;
+                            } else if (!latestRef.isDirect && firstRef && !firstRef.isDirect && latestRef.label !== firstRef.label) {
+                              primaryRef = latestRef;
+                              secondaryNotice = `via ${firstRef.label}`;
+                            }
 
                             return (
                               <div className="flex flex-col gap-0.5">
                                 <span
                                   className={`text-[11px] font-medium truncate max-w-[140px] ${
-                                    latestRef.isDirect ? "text-slate-400" : "text-indigo-300"
+                                    primaryRef.isDirect ? "text-slate-400" : "text-indigo-300 font-semibold"
                                   }`}
-                                  title={`Latest Non-Direct Source: ${v.referrer || "Direct"}`}
+                                  title={`Attributed Source: ${primaryRef.label} (Original: ${v.firstReferrer || "Direct"})`}
                                 >
-                                  {latestRef.label}
+                                  {primaryRef.label}
                                 </span>
 
                                 {campaign ? (
@@ -1064,12 +1093,12 @@ export default function AdminDashboard() {
                                   <span className="text-[9px] text-slate-600">Organic</span>
                                 )}
 
-                                {hasChangedSource && (
+                                {secondaryNotice && (
                                   <span
                                     className="text-[8.5px] text-slate-500 truncate max-w-[130px]"
                                     title={`Originally discovered via: ${v.firstReferrer}`}
                                   >
-                                    via {firstRef.label}
+                                    {secondaryNotice}
                                   </span>
                                 )}
                               </div>
